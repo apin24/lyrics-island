@@ -390,6 +390,48 @@ public class IslandModelTests
         Assert.Equal(10.12, h.Model.CurrentTime, 6);
     }
 
+    /// <summary>
+    /// The report sequence Spotify sent through SMTC in milestone 1: after a seek or a track change, a second
+    /// report 0.1–0.15s later corrects the first one backwards by 0.1–0.2s (audio starts after buffering).
+    /// </summary>
+    private static void SeekThenTrackChange(ModelHarness h, Action<double> afterCorrection)
+    {
+        var first = new Track("long-1", "Long Song", "Test Band", "Test Album", 178.763);
+        var second = new Track("long-2", "Next Song", "Test Band", "Test Album", 164.976);
+
+        h.Play(8.255, first);
+        h.Step(2.4);
+        h.Play(30.743, first);  // seek
+        h.Step(0.11);
+        h.Play(30.754, first);  // 0.099s behind the extrapolated 30.853
+        afterCorrection(30.754);
+
+        h.Step(4);
+        h.Play(0, second);      // track change
+        h.Step(0.146);
+        h.Play(0, second);      // 0.146s behind
+        h.Step(0.03);
+        h.Play(0.011, second);  // 0.165s behind the first report's extrapolation
+        afterCorrection(0.011);
+    }
+
+    [Fact]
+    public void ZeroThresholdAppliesSmtcCorrectionsAfterSeekAndTrackChange()
+    {
+        using var h = new ModelHarness(ModelHarness.Found, resyncThreshold: 0);
+
+        SeekThenTrackChange(h, reported => Assert.Equal(reported, h.Model.CurrentTime, 6));
+    }
+
+    [Fact]
+    public void MacThresholdKeepsTheClockAheadAfterSmtcCorrections()
+    {
+        // Why the SMTC player uses 0: with 0.35s the corrections above are ignored.
+        using var h = new ModelHarness(ModelHarness.Found);
+
+        SeekThenTrackChange(h, reported => Assert.InRange(h.Model.CurrentTime - reported, 0.09, 0.17));
+    }
+
     [Fact]
     public void StateAndTrackChangesAlwaysTakeTheReport()
     {
