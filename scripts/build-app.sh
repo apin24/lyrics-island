@@ -26,6 +26,7 @@ else
 fi
 
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 # Ad-hoc signature so macOS can remember the Automation (Spotify) permission.
 codesign --force --sign - "$APP"

@@ -1,3 +1,5 @@
+<img src="docs/icon.png" width="128" alt="Lyrics Island app icon">
+
 # Lyrics Island
 
 **Synced Spotify lyrics in a Dynamic Island–style pill at the top of your Mac's screen.**
@@ -137,6 +139,7 @@ swift build && .build/debug/LyricsIsland --snapshot /tmp/island     # render eve
 open build.noindex/LyricsIsland.app --args --diagnose /tmp/diag.txt         # what the app can see of the menu bar
 swift scripts/record-demo.swift build.noindex/LyricsIsland.app docs/demo.gif  # re-record the README GIF (--showcase)
 ./scripts/package-release.sh                                        # universal .zip for a GitHub release
+swift scripts/make-icon.swift                                       # redraw Resources/AppIcon.icns + docs/icon.png
 ```
 
 ## Known limitations
@@ -167,11 +170,12 @@ scripts/
   build-app.sh          builds and ad-hoc signs build.noindex/LyricsIsland.app ("universal" = arm64 + x86_64)
   package-release.sh    universal build → build.noindex/LyricsIsland-<version>.zip + sha256
   record-demo.swift     screen-records --showcase and writes docs/demo.gif
+  make-icon.swift       draws the app icon in code → Resources/AppIcon.icns
 ```
 
 ## Contributing
 
-Issues and pull requests are welcome. Ideas: Apple Music support, a notch-wrapping layout, marquee scrolling for long lines, a fullscreen lyrics view, an app icon.
+Issues and pull requests are welcome. Ideas: Apple Music support, a notch-wrapping layout, marquee scrolling for long lines, a fullscreen lyrics view.
 
 Build with `swift build`, and check UI changes with `--snapshot` before opening a PR.
 
