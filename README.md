@@ -7,6 +7,7 @@ The current line follows the song in real time. Hover the pill and it expands in
 ![Lyrics Island demo: lyrics change with the song, hovering expands the karaoke panel](docs/demo.gif)
 
 ```bash
+brew tap apin24/tap && brew trust --tap apin24/tap
 brew install --cask apin24/tap/lyrics-island
 ```
 
@@ -44,10 +45,12 @@ brew install --cask apin24/tap/lyrics-island
 ### Homebrew (recommended)
 
 ```bash
+brew tap apin24/tap
+brew trust --tap apin24/tap
 brew install --cask apin24/tap/lyrics-island
 ```
 
-Update later with `brew upgrade --cask lyrics-island`.
+Recent Homebrew versions only load casks from third-party taps you've trusted, hence `brew trust`. Update later with `brew upgrade --cask lyrics-island`.
 
 ### Download
 
