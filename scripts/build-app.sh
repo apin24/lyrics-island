@@ -7,19 +7,19 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 MODE="${1:-release}"
-APP="build/LyricsIsland.app"
+APP="build.noindex/LyricsIsland.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 if [ "$MODE" = "universal" ]; then
     # Both triples can share one output folder, so copy each binary out before the next build.
-    mkdir -p build/arch
+    mkdir -p build.noindex/arch
     for ARCH in arm64 x86_64; do
         swift build -c release --triple "$ARCH-apple-macosx14.0"
-        cp "$(swift build -c release --triple "$ARCH-apple-macosx14.0" --show-bin-path)/LyricsIsland" "build/arch/LyricsIsland-$ARCH"
+        cp "$(swift build -c release --triple "$ARCH-apple-macosx14.0" --show-bin-path)/LyricsIsland" "build.noindex/arch/LyricsIsland-$ARCH"
     done
-    lipo -create build/arch/LyricsIsland-arm64 build/arch/LyricsIsland-x86_64 -output "$APP/Contents/MacOS/LyricsIsland"
-    rm -rf build/arch
+    lipo -create build.noindex/arch/LyricsIsland-arm64 build.noindex/arch/LyricsIsland-x86_64 -output "$APP/Contents/MacOS/LyricsIsland"
+    rm -rf build.noindex/arch
 else
     swift build -c "$MODE"
     cp "$(swift build -c "$MODE" --show-bin-path)/LyricsIsland" "$APP/Contents/MacOS/LyricsIsland"

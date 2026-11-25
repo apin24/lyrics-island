@@ -1,7 +1,7 @@
 // Records the README demo GIF: screen-records the top-center of the main screen while
 // LyricsIsland runs in --showcase mode, then converts the video to docs/demo.gif.
 //
-//   swift scripts/record-demo.swift build/LyricsIsland.app docs/demo.gif
+//   swift scripts/record-demo.swift build.noindex/LyricsIsland.app docs/demo.gif
 //
 // Needs Screen Recording permission for the terminal you run it from. No ffmpeg required.
 import AppKit

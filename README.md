@@ -79,7 +79,7 @@ Needs the Xcode Command Line Tools (`xcode-select --install`). Full Xcode is **n
 git clone https://github.com/apin24/lyrics-island.git
 cd lyrics-island
 ./scripts/build-app.sh
-open build/LyricsIsland.app
+open build.noindex/LyricsIsland.app
 ```
 
 To try it without Spotify:
@@ -134,8 +134,8 @@ Developer helpers:
 
 ```bash
 swift build && .build/debug/LyricsIsland --snapshot /tmp/island     # render every state to PNG
-open build/LyricsIsland.app --args --diagnose /tmp/diag.txt         # what the app can see of the menu bar
-swift scripts/record-demo.swift build/LyricsIsland.app docs/demo.gif  # re-record the README GIF (--showcase)
+open build.noindex/LyricsIsland.app --args --diagnose /tmp/diag.txt         # what the app can see of the menu bar
+swift scripts/record-demo.swift build.noindex/LyricsIsland.app docs/demo.gif  # re-record the README GIF (--showcase)
 ./scripts/package-release.sh                                        # universal .zip for a GitHub release
 ```
 
@@ -164,8 +164,8 @@ Sources/LyricsIsland/
   Settings.swift        preferences
   Showcase.swift        scripted demo used to record the README GIF
 scripts/
-  build-app.sh          builds and ad-hoc signs build/LyricsIsland.app ("universal" = arm64 + x86_64)
-  package-release.sh    universal build → build/LyricsIsland-<version>.zip + sha256
+  build-app.sh          builds and ad-hoc signs build.noindex/LyricsIsland.app ("universal" = arm64 + x86_64)
+  package-release.sh    universal build → build.noindex/LyricsIsland-<version>.zip + sha256
   record-demo.swift     screen-records --showcase and writes docs/demo.gif
 ```
 
