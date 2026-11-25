@@ -15,10 +15,17 @@ public partial class App : Application
     {
         base.OnStartup(e);
         var options = AppOptions.Parse(e.Args);
+        if (options.Shadow is { } shadow) PillView.CompactShadow = shadow;
 
         if (options.SnapshotDirectory is { } directory)
         {
             Snapshot.RenderAll(directory);
+            Shutdown();
+            return;
+        }
+        if (options.RecordDirectory is { } frames)
+        {
+            Recorder.Record(frames);
             Shutdown();
             return;
         }
@@ -35,12 +42,16 @@ public partial class App : Application
         // Started on the UI thread, so the demo player's updates arrive on it too.
         _player = new DemoPlayer(options.DemoStart);
         model.Attach(_player);
+        if (options.StartPaused) _player.PlayPause();
 
         _tray = new TrayIcon(() => window.Position, window.SetPosition, Shutdown);
 
         if (options.DiagnoseFile is { } file)
         {
-            After(TimeSpan.FromSeconds(2), () => File.WriteAllText(file, window.Diagnose()));
+            // Rewritten every 2s, so a script can watch it change (e.g. while the display scale changes).
+            var diagnose = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            diagnose.Tick += (_, _) => File.WriteAllText(file, $"time: {DateTime.Now:HH:mm:ss}\n" + window.Diagnose());
+            diagnose.Start();
         }
         if (options.ExitAfter is { } seconds)
         {

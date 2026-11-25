@@ -201,7 +201,43 @@ Not checked yet: other scale factors, a DPI change while running, several monito
 | Good | Same place as on the Mac, reads like a Dynamic Island. Nothing else lives there except the middle of a title bar. | Never covers title bars or browser tabs. |
 | Bad | In a maximized window it covers the middle of the title bar or tab strip (y 8–42). While the cursor is on the pill, whatever is beneath it can't be clicked. | Covers the bottom of maximized windows: chat input boxes, status bars, video player controls, which get used a lot while music plays. It also sits right on top of Windows 11's centered taskbar icons and looks crowded. On the PC it covered the toolbar under a chat input. |
 
-Milestone 6 should add an "Island Position: Top / Bottom" menu item (the preview tray menu already has it).
+Milestone 6 should add an "Island Position: Top / Bottom" menu item (the preview tray menu already has it). *Agreed after review: top center is the default.*
+
+### Notes from milestone 4 (states and motion)
+
+All compact states, the song change state and the motion from `IslandView.swift` / `Components.swift`. Renders of every state and a GIF of the transitions are in [`docs/screenshots/windows/`](screenshots/windows) (`transitions.gif`: appear, song change, line changes, interlude, a track without lyrics, pause, disappear; made with `windows/tools/record-demo.ps1`, off screen on a simulated clock, flat background).
+
+| Piece | How |
+|---|---|
+| Springs | SwiftUI's `.spring(response:dampingFraction:)` simulated per frame: stiffness (2π/response)², damping 4π·dampingFraction/response, unit mass. A new target keeps the velocity, as in SwiftUI. Mode changes use (0.42, 0.82), line changes and text size (0.35, 0.86). |
+| Mode change | Width, height and corner radius on the mode spring; the old and new rows cross-fade in 0.18s, centered and clipped by the pill. |
+| Line change | The old line slides up and fades, the new one comes in from below, clipped to the 18 pt slot; the slot width follows on the line spring and the pill hugs it. Ends of the new line can be clipped for 2–3 frames while the pill is still growing. |
+| Appear / disappear | Scale from 0.4 plus fade on the mode spring, anchored at the screen edge (top, or bottom in the bottom position). |
+| Equalizer / dots | The Mac formulas, 20 fps on one shared clock; the equalizer is flat at 3/14 and stops when paused. |
+| Song change | 52 high, radius 26, art 36 (radius 9), title Semibold 14 + artist Regular 12 at white 60%, a 28 pt spacer before the equalizer. 100 px high at 2× like the Mac's songChange.png; 492 vs. 506 px wide (font). Segoe's taller line height is set to SF's 1.19 em, and the text block is nudged up 1.25 DIP, so the two lines sit like on the Mac. |
+| Text size | Compact text 13 × scale, max width 380 × scale, then ellipsis (Small 0.9 / Medium 1 / Large 1.15). |
+
+**Shadow.** `DropShadowEffect` blurs differently from SwiftUI: with the literal spec values (blur 24, offset 8, 35%) the shadow ends much closer to the pill. Rendering the lyric pill with several values and comparing the darkening under it with the Mac's `lyric.png` (every 3 px over 70 px at 2×) gave **blur 40, offset 8, opacity 0.42** (RMS difference 0.0095, vs. 0.043 for the literal values). The expanded shadow (0/20/50, 45%) needs the same calibration against `expanded.png` in milestone 5 (`--shadow blur,offset,opacity` overrides it for that). The shadow sits on its own layer with a `BitmapCache`, so the equalizer and line slides don't re-render the blur; it's only re-rendered while the pill changes size.
+
+**CPU.** The test PC's monitor runs at **180 Hz**, and `CompositionTarget.Rendering` fires at that rate. Every animation step re-presents the layered window, which costs about 1.4 ms of CPU however little changed. What was done:
+
+- Animations step at most 60 times a second (every third frame at 180 Hz), still in step with the display. A `DispatcherTimer` was a little cheaper but ticked unevenly (~45 fps, the 15.6 ms timer resolution).
+- Springs stop once they're within a quarter pixel (the invisible sub-pixel tail was half the frames).
+- Each lyric line is formatted and drawn once into its own `DrawingVisual`; a frame only moves its transform and changes its brush opacity. Re-drawing the text every frame cost ~1 ms per frame.
+- The equalizer and the dots share one 20 fps clock.
+
+Measured on a Release build, % of one core, from 3s to 23s after start (startup excluded), three runs each:
+
+| Scenario | Runs | Average |
+|---|---|---|
+| A: 4 line changes in 20s | 2.77 / 2.57 / 3.14 | **2.83%** |
+| B: 2 mode changes + 1 line change in 20s | 2.42 / 3.35 / 2.91 | **2.89%** |
+| Paused, nothing moving | 1.41 / 1.26 / 1.74 | 1.47% |
+| Interlude (equalizer + dots) | 2.18 / 2.38 / 2.56 | 2.37% |
+
+Caveat: these runs happened while a game was running on the PC (about two cores busy, plus a screen recorder), so they're noisy and probably high. Milestone 3's 0.6% was measured on an idle PC. Measure again on an idle PC before the release.
+
+Not checked yet: **DPI 125% / 150%** and changing the scale while the app runs (the PC was in use, and changing the scale disturbs everything on screen), and a second monitor (the PC has one). Possible line flicker right after a seek can't happen yet (the demo never seeks); check it in milestone 5.
 
 ## Visual spec (from the Mac app and Figma)
 

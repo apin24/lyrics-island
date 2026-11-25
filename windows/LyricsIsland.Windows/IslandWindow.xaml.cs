@@ -81,6 +81,7 @@ public partial class IslandWindow : Window
         if (Position == IslandPosition.Top)
         {
             y = work.Top;
+            Pill.AnchorTop = true;
             Pill.VerticalAlignment = VerticalAlignment.Top;
             Pill.Margin = new Thickness(0, EdgeGap, 0, 0);
         }
@@ -88,6 +89,7 @@ public partial class IslandWindow : Window
         {
             // Let the window reach the bottom of the screen so the shadow can fall onto the taskbar.
             y = monitor.Bottom - height;
+            Pill.AnchorTop = false;
             Pill.VerticalAlignment = VerticalAlignment.Bottom;
             Pill.Margin = new Thickness(0, 0, 0, (monitor.Bottom - work.Bottom) / scale + EdgeGap);
         }
@@ -166,6 +168,9 @@ public partial class IslandWindow : Window
         sb.AppendLine($"ex-style: toolwindow={(style & Native.WS_EX_TOOLWINDOW) != 0} noactivate={(style & Native.WS_EX_NOACTIVATE) != 0}" +
                       $" layered={(style & Native.WS_EX_LAYERED) != 0} transparent(click-through)={(style & Native.WS_EX_TRANSPARENT) != 0}");
         sb.AppendLine($"accepts mouse: {_model.AcceptsMouse}");
+        sb.AppendLine($"animator: {Animator.Describe()}");
+        var renderMode = HwndSource.FromHwnd(_hwnd)?.CompositionTarget?.RenderMode.ToString() ?? "?";
+        sb.AppendLine($"rendering: tier {System.Windows.Media.RenderCapability.Tier >> 16}, window render mode {renderMode}");
         sb.AppendLine($"font: {Theme.TextFont.Source} → {DescribeFont()}");
         return sb.ToString();
     }

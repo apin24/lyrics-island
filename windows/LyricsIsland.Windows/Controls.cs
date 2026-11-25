@@ -67,30 +67,47 @@ public sealed class HStack : Panel
 public abstract class AnimatedElement : FrameworkElement
 {
     private static readonly Stopwatch Clock = Stopwatch.StartNew();
-    private readonly DispatcherTimer _timer;
+    /// <summary>One 20 fps clock for all of them, so the equalizer and the dots redraw in the same frame.</summary>
+    private static readonly HashSet<AnimatedElement> Ticking = [];
+    private static DispatcherTimer? _clock;
 
-    protected AnimatedElement(double fps)
+    protected AnimatedElement()
     {
-        _timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromSeconds(1 / fps) };
-        _timer.Tick += (_, _) => InvalidateVisual();
         IsVisibleChanged += (_, _) => UpdateTimer();
-        Unloaded += (_, _) => _timer.Stop();
+        Unloaded += (_, _) => SetTicking(false);
         Loaded += (_, _) => UpdateTimer();
     }
 
-    /// <summary>Freezes the animation at this time (snapshots).</summary>
-    public double? FixedTime { get; set; }
+    /// <summary>Freezes every animated element at this time (snapshots, recording).</summary>
+    public static double? TimeOverride { get; set; }
 
-    protected double Time => FixedTime ?? Clock.Elapsed.TotalSeconds;
+    protected static double Time => TimeOverride ?? Clock.Elapsed.TotalSeconds;
 
     protected virtual bool IsAnimating => true;
 
     protected void UpdateTimer()
     {
-        var run = IsVisible && IsAnimating && FixedTime is null;
-        if (run && !_timer.IsEnabled) _timer.Start();
-        else if (!run && _timer.IsEnabled) _timer.Stop();
+        SetTicking(IsVisible && IsAnimating && TimeOverride is null);
         InvalidateVisual();
+    }
+
+    private void SetTicking(bool ticking)
+    {
+        if (ticking ? !Ticking.Add(this) : !Ticking.Remove(this)) return;
+        if (Ticking.Count > 0 && _clock is null)
+        {
+            _clock = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromSeconds(1 / 20.0) };
+            _clock.Tick += (_, _) =>
+            {
+                foreach (var element in Ticking) element.InvalidateVisual();
+            };
+            _clock.Start();
+        }
+        else if (Ticking.Count == 0 && _clock is not null)
+        {
+            _clock.Stop();
+            _clock = null;
+        }
     }
 }
 
@@ -102,7 +119,7 @@ public sealed class Equalizer : AnimatedElement
     private const double BarWidth = 2.5, BarSpacing = 1.5, BarHeight = 14, FrameWidth = 16;
     private bool _playing = true;
 
-    public Equalizer() : base(20)
+    public Equalizer()
     {
     }
 
@@ -144,7 +161,7 @@ public sealed class Equalizer : AnimatedElement
 /// <summary>Three pulsing white dots (interlude, loading).</summary>
 public sealed class PulsingDots : AnimatedElement
 {
-    public PulsingDots() : base(20)
+    public PulsingDots()
     {
     }
 

@@ -18,6 +18,7 @@ internal static class Snapshot
 
     private static readonly (IslandMode Mode, double Time)[] States =
     [
+        (IslandMode.SongChange, 0),
         (IslandMode.Lyric, 16),       // "you said that everything's alright", as in docs/screenshots/lyric.png
         (IslandMode.Interlude, 35),
         (IslandMode.Loading, 0),
@@ -29,20 +30,23 @@ internal static class Snapshot
     public static void RenderAll(string directory)
     {
         Directory.CreateDirectory(directory);
+        Animator.Manual = true;
+        AnimatedElement.TimeOverride = 0.45; // a moment where the equalizer bars differ
         var model = new IslandModel(new IslandSettings(), new NoLyrics());
         foreach (var (mode, time) in States)
         {
             model.LoadPreview(time);
             model.ForcedMode = mode;
-            Save(Render(model), Path.Combine(directory, $"{mode.ToString().ToLowerInvariant()}.png"));
+            var name = mode == IslandMode.SongChange ? "songChange" : mode == IslandMode.NoLyrics ? "noLyrics" : mode.ToString().ToLowerInvariant();
+            Save(Render(model), Path.Combine(directory, $"{name}.png"));
         }
     }
 
     private static BitmapSource Render(IslandModel model)
     {
         var pill = new PillView { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 8, 0, 0) };
-        pill.FreezeAnimations(0.45); // a moment where the equalizer bars differ
         pill.Render(model);
+        pill.Finish();
         var root = new Grid { Width = Width, Height = Height, Background = Background(), Children = { pill } };
         root.Measure(new Size(Width, Height));
         root.Arrange(new Rect(0, 0, Width, Height));
