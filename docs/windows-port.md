@@ -226,16 +226,16 @@ All compact states, the song change state and the motion from `IslandView.swift`
 - Each lyric line is formatted and drawn once into its own `DrawingVisual`; a frame only moves its transform and changes its brush opacity. Re-drawing the text every frame cost ~1 ms per frame.
 - The equalizer and the dots share one 20 fps clock.
 
-Measured on an idle PC with a Release build, % of one core, from 3s to 23s after start (startup excluded):
+**Measuring it correctly.** The first numbers came from `Process.TotalProcessorTime`, which Windows charges in 15.6 ms clock ticks to whichever thread happens to be running at the tick. Short bursts like a 20 fps redraw are mostly missed. A calibration load spinning 1 ms bursts at a real 3.1% read **1.82%** that way and **3.18%** with `QueryProcessCycleTime` (CPU cycles, converted with the 3.7 GHz base clock); one 50 ms burst per second read 5.46% vs. 4.97%. So these numbers are in cycles, idle PC, Release build, % of one core:
 
-| Scenario | Runs | Average |
-|---|---|---|
-| A: 4 line changes in 20s | 2.52 / 2.16 / 1.88 | **2.19%** |
-| B: 2 mode changes + 1 line change in 20s | 2.45 / 2.52 / 2.31 | **2.43%** |
-| Interlude (equalizer + dots), nothing else | 0.61 / 0.61 | 0.61% |
-| Paused, nothing moving | 0.81 / 0.61 | 0.71% |
+| Scenario | Window | Runs | Average | (earlier, TotalProcessorTime) |
+|---|---|---|---|---|
+| A: 4 line changes in 20s | 3s–23s | 4.73 / 4.77 / 4.64 | **4.71%** | 2.19% |
+| B: 2 mode changes + 1 line change in 20s | 3s–23s | 4.89 / 4.77 / 4.85 | **4.84%** | 2.43% |
+| Interlude (equalizer + dots), nothing else | 15s–21s | 2.43 / 2.32 / 2.33 | **2.36%** | 0.61% |
+| Paused, nothing moving | 15s–21s | 0.38 / 0.41 / 0.39 | **0.40%** | 0.71% |
 
-(A first round taken while a game was running gave 2.8–2.9% for A and B: other load on the PC adds noticeably.)
+**This misses the < 3% target** whenever the equalizer runs. Most of it is the layered window (`AllowsTransparency`): every redraw, however small, is rendered on the GPU, copied back and handed to `UpdateLayeredWindow`, about 1.2 ms of CPU per presented frame. The equalizer alone presents 20 frames a second. Paused is the lowest: nothing redraws, only the 100 ms tick runs (~110 µs per tick). The fullscreen check (~290 µs) now only runs when "Hide When an App Is Fullscreen" is on (off by default). Paused and interlude are measured 15s after start because the runtime's tiered JIT is still busy in the first seconds; that inflated the earlier paused number.
 
 **DPI.** Checked by changing the display scale while the app runs (`DisplayConfigSetDeviceInfo`, the same call the Settings app makes), then putting it back to 100%:
 
@@ -247,7 +247,9 @@ Measured on an idle PC with a Release build, % of one core, from 3s to 23s after
 | 150%, bottom position | 390,450 1140×630 | 945–996 | 12 px above the taskbar (work area ends at 1008) |
 | back to 100% (live change, bottom) | 580,660 760×420 | 990–1024 | 8 px above the taskbar |
 
-The window is re-centered and re-sized on every change, the gap scales with the DPI, and text, artwork and equalizer are re-rendered at the new resolution (sharp, not a scaled bitmap). Not checked: a second monitor (the PC has one). Possible line flicker right after a seek can't happen yet (the demo never seeks); check it in milestone 5.
+The window is re-centered and re-sized on every change, the gap scales with the DPI, and text, artwork and equalizer are re-rendered at the new resolution (sharp, not a scaled bitmap). Off-screen renders at those scales: [`lyric@125.png`](screenshots/windows/lyric@125.png), [`lyric@150.png`](screenshots/windows/lyric@150.png) (the screenshots taken on the PC show the desktop around the pill, so they aren't in the repo). Not checked: a second monitor (the PC has one).
+
+**Line clipped while the pill grows.** The Mac does the same: in `docs/demo.gif` (frames 192–194, "you said that everything's alright" → "but the night has never been this quiet") the new line reads "…this qu" and "…this quie" before the pill has grown. Left as is. Possible line flicker right after a seek can't happen yet (the demo never seeks); check it in milestone 5.
 
 ## Visual spec (from the Mac app and Figma)
 

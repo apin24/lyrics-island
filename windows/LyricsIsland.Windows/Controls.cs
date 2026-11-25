@@ -71,6 +71,10 @@ public abstract class AnimatedElement : FrameworkElement
     private static readonly HashSet<AnimatedElement> Ticking = [];
     private static DispatcherTimer? _clock;
 
+    /// <summary>For <c>--diagnose</c>: what keeps the 20 fps clock running.</summary>
+    public static string DescribeTicking() =>
+        Ticking.Count == 0 ? "stopped" : $"{Ticking.Count} element(s): {string.Join(", ", Ticking.Select(e => e.GetType().Name))}";
+
     protected AnimatedElement()
     {
         IsVisibleChanged += (_, _) => UpdateTimer();

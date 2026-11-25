@@ -11,8 +11,8 @@ public sealed record AppOptions
     /// <summary>Where the demo song starts, in seconds (handy for screenshots).</summary>
     public double DemoStart { get; init; }
 
-    /// <summary>Pause the demo right away (checks of the paused state).</summary>
-    public bool StartPaused { get; init; }
+    /// <summary>Pause the demo after this many seconds (0 = right away; checks of the paused state).</summary>
+    public double? PauseAfter { get; init; }
 
     public IslandPosition Position { get; init; } = IslandPosition.Top;
 
@@ -51,7 +51,8 @@ public sealed record AppOptions
             {
                 "--demo" => options with { Demo = true },
                 "--demo-start" => options with { DemoStart = Number() ?? 0 },
-                "--start-paused" => options with { StartPaused = true },
+                "--start-paused" => options with { PauseAfter = 0 },
+                "--pause-after" => options with { PauseAfter = Number() },
                 "--position" => options with
                 {
                     Position = Next()?.ToLowerInvariant() == "bottom" ? IslandPosition.Bottom : IslandPosition.Top,

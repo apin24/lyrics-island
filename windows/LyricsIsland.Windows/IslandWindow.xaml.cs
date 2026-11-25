@@ -109,13 +109,28 @@ public partial class IslandWindow : Window
         return 0;
     }
 
+    private readonly System.Diagnostics.Stopwatch _tickTime = new();
+    private readonly System.Diagnostics.Stopwatch _fullscreenTime = new();
+
     private void Tick()
     {
+        _tickTime.Start();
         _ticks++;
-        if (_ticks % 10 == 0) _model.IsFullscreen = Native.IsFullscreenAppActive();
+        // Only ask Windows about fullscreen apps when the setting that uses it is on (it's off by default).
+        if (_ticks % 10 == 0 && _model.Settings.HideInFullscreen)
+        {
+            _fullscreenTime.Start();
+            _model.IsFullscreen = Native.IsFullscreenAppActive();
+            _fullscreenTime.Stop();
+        }
+        else if (!_model.Settings.HideInFullscreen && _model.IsFullscreen)
+        {
+            _model.IsFullscreen = false;
+        }
         _model.Tick(CursorOverPill());
         SetClickThrough(!_model.AcceptsMouse);
         Pill.Render(_model);
+        _tickTime.Stop();
     }
 
     private bool CursorOverPill()
@@ -169,6 +184,9 @@ public partial class IslandWindow : Window
                       $" layered={(style & Native.WS_EX_LAYERED) != 0} transparent(click-through)={(style & Native.WS_EX_TRANSPARENT) != 0}");
         sb.AppendLine($"accepts mouse: {_model.AcceptsMouse}");
         sb.AppendLine($"animator: {Animator.Describe()}");
+        sb.AppendLine($"20 fps clock: {AnimatedElement.DescribeTicking()}");
+        sb.AppendLine($"ticks: {_ticks}, {_tickTime.Elapsed.TotalMilliseconds * 1000 / Math.Max(1, _ticks):0} µs each on average; " +
+                      $"fullscreen checks took {_fullscreenTime.Elapsed.TotalMilliseconds:0.0} ms in total");
         var renderMode = HwndSource.FromHwnd(_hwnd)?.CompositionTarget?.RenderMode.ToString() ?? "?";
         sb.AppendLine($"rendering: tier {System.Windows.Media.RenderCapability.Tier >> 16}, window render mode {renderMode}");
         sb.AppendLine($"font: {Theme.TextFont.Source} → {DescribeFont()}");

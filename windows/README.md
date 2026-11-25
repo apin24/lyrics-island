@@ -9,7 +9,7 @@ The Windows port of Lyrics Island: C# + WPF on .NET 8, reading the current track
 | 1. SMTC probe | Done, see [Findings (milestone 1)](../docs/windows-port.md#findings-milestone-1) |
 | 2. Core library + tests | Done, see [Notes from milestone 2](../docs/windows-port.md#notes-from-milestone-2-lyricsislandcore) |
 | 3. Compact pill | Done (demo player), see [Notes from milestone 3](../docs/windows-port.md#notes-from-milestone-3-compact-pill) |
-| 4. All states + animations | Done, see [Notes from milestone 4](../docs/windows-port.md#notes-from-milestone-4-states-and-motion) |
+| 4. All states + animations | Done; CPU is above the 3% target while the equalizer runs, see [Notes from milestone 4](../docs/windows-port.md#notes-from-milestone-4-states-and-motion) |
 | 5. Expanded panel | To do |
 | 6. Tray menu, settings, hotkey | To do |
 | 7. Release | To do |
@@ -45,8 +45,8 @@ For now it always plays the fictional demo song. Quit from the tray icon (the wh
 |---|---|
 | `--demo-start <sec>` | Start the demo song at this position |
 | `--position top\|bottom` | Top center (default) or bottom center above the taskbar |
-| `--start-paused` | Pause the demo right away |
-| `--snapshot <dir>` | Render every pill state to PNG (2×, flat background) and exit |
+| `--start-paused`, `--pause-after <sec>` | Pause the demo right away / after a while |
+| `--snapshot <dir>` | Render every pill state to PNG (2×, flat background), plus the lyric pill at 125% and 150%, and exit |
 | `--record <dir>` | Write the frames of a scripted demo (25 fps, off screen) and exit; `tools/record-demo.ps1` turns them into a GIF with ffmpeg |
 | `--diagnose <file>` | Every 2s, write the window and pill rects, DPI, extended styles, font and animation frame count to a file |
 | `--shadow <blur,offset,opacity>` | Override the pill shadow (for calibrating against the Mac screenshots) |

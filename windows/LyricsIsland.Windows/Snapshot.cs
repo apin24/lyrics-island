@@ -40,9 +40,17 @@ internal static class Snapshot
             var name = mode == IslandMode.SongChange ? "songChange" : mode == IslandMode.NoLyrics ? "noLyrics" : mode.ToString().ToLowerInvariant();
             Save(Render(model), Path.Combine(directory, $"{name}.png"));
         }
+
+        // The lyric pill at the 125% and 150% display scales (1×, i.e. what a screen at that scale shows).
+        model.LoadPreview(16);
+        model.ForcedMode = IslandMode.Lyric;
+        foreach (var dpiScale in new[] { 1.25, 1.5 })
+        {
+            Save(Render(model, dpiScale), Path.Combine(directory, $"lyric@{dpiScale * 100:0}.png"));
+        }
     }
 
-    private static BitmapSource Render(IslandModel model)
+    private static BitmapSource Render(IslandModel model, double scale = Scale)
     {
         var pill = new PillView { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 8, 0, 0) };
         pill.Render(model);
@@ -52,7 +60,7 @@ internal static class Snapshot
         root.Arrange(new Rect(0, 0, Width, Height));
         root.UpdateLayout();
 
-        var bitmap = new RenderTargetBitmap((int)(Width * Scale), (int)(Height * Scale), 96 * Scale, 96 * Scale, PixelFormats.Pbgra32);
+        var bitmap = new RenderTargetBitmap((int)(Width * scale), (int)(Height * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
         bitmap.Render(root);
         bitmap.Freeze();
         return bitmap;

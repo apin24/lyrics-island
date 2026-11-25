@@ -42,7 +42,11 @@ public partial class App : Application
         // Started on the UI thread, so the demo player's updates arrive on it too.
         _player = new DemoPlayer(options.DemoStart);
         model.Attach(_player);
-        if (options.StartPaused) _player.PlayPause();
+        if (options.PauseAfter is { } pause)
+        {
+            if (pause <= 0) _player.PlayPause();
+            else After(TimeSpan.FromSeconds(pause), () => _player.PlayPause());
+        }
 
         _tray = new TrayIcon(() => window.Position, window.SetPosition, Shutdown);
 
