@@ -141,7 +141,8 @@ swift scripts/record-demo.swift build/LyricsIsland.app docs/demo.gif  # re-recor
 
 ## Known limitations
 
-- Spotify only, for now. Apple Music support would be a nice contribution.
+- macOS only, for now. A Windows version is planned; see the [Windows port brief](docs/windows-port.md).
+- Spotify only on macOS. Apple Music support would be a nice contribution.
 - Designed and tested on a MacBook without a notch. On notched MacBooks the island sits just below the notch; that layout hasn't been tested on real hardware yet.
 - Some songs (local, niche, very new) aren't on LRCLIB. You can [contribute lyrics to LRCLIB](https://lrclib.net) to help everyone.
 - macOS can't tell a fullscreen video from a fullscreen editor, so hiding in fullscreen is opt-in.
