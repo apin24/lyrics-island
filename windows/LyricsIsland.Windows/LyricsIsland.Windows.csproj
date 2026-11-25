@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The WPF app: transparent island window, tray icon, players. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <!-- SMTC needs Windows 10 1809 (build 17763) or later. -->
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <!-- Only for the tray icon (NotifyIcon); WPF has none. -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RootNamespace>LyricsIsland.Windows</RootNamespace>
+    <AssemblyName>LyricsIsland</AssemblyName>
+    <AssemblyTitle>Lyrics Island</AssemblyTitle>
+    <!-- WFAC010 wants WinForms' SetHighDpiMode; this is a WPF app, where app.manifest is the right place. -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WinForms is only used for NotifyIcon; keep its types out of the WPF namespace. -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LyricsIsland.Core\LyricsIsland.Core.csproj" />
+  </ItemGroup>
+
+</Project>

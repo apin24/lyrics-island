@@ -8,7 +8,7 @@ The Windows port of Lyrics Island: C# + WPF on .NET 8, reading the current track
 |---|---|
 | 1. SMTC probe | Done, see [Findings (milestone 1)](../docs/windows-port.md#findings-milestone-1) |
 | 2. Core library + tests | Done, see [Notes from milestone 2](../docs/windows-port.md#notes-from-milestone-2-lyricsislandcore) |
-| 3. Compact pill | To do |
+| 3. Compact pill | Done (demo player), see [Notes from milestone 3](../docs/windows-port.md#notes-from-milestone-3-compact-pill) |
 | 4. All states + animations | To do |
 | 5. Expanded panel | To do |
 | 6. Tray menu, settings, hotkey | To do |
@@ -27,8 +27,26 @@ windows/
   Directory.Build.props        shared settings (version, nullable)
   LyricsIsland.Core/           LRC parser, LRCLIB client, settings, demo player, state machine (no UI, plain net8.0)
   LyricsIsland.Core.Tests/     xUnit tests for every timing and parsing rule
+  LyricsIsland.Windows/        the WPF app: transparent island window, pill, tray icon
   tools/SmtcProbe/             milestone 1: console probe for SMTC
 ```
+
+## Run the app
+
+```bash
+cd windows
+dotnet run --project LyricsIsland.Windows
+```
+
+For now it always plays the fictional demo song. Quit from the tray icon (the white speech bubble in the notification area), which can also move the island between the top and bottom center.
+
+| Option | Meaning |
+|---|---|
+| `--demo-start <sec>` | Start the demo song at this position |
+| `--position top\|bottom` | Top center (default) or bottom center above the taskbar |
+| `--snapshot <dir>` | Render every pill state to PNG (2×, flat background) and exit |
+| `--diagnose <file>` | After 2s, write the window and pill rects, DPI, extended styles and font to a file |
+| `--exit-after <sec>` | Quit by itself (scripted checks) |
 
 ## Tests
 

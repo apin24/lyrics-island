@@ -61,7 +61,7 @@ var timeline = session.GetTimelineProperties();            // Position, EndTime,
 ```
 
 - **Events:** `SessionsChanged`, `CurrentSessionChanged`, and per session `MediaPropertiesChanged`, `PlaybackInfoChanged`, `TimelinePropertiesChanged`.
-- **Position:** the timeline isn't pushed continuously. Compute `position = timeline.Position + (now - timeline.LastUpdatedTime)` while playing, and tick locally about 10×/s. This is the same idea as the Mac's `PlayerSnapshot.position(at:)`. Only resync when the reported position drifts more than 0.35s from the local clock. *Milestone 1 found a reason to take every report from SMTC instead; that's a proposal for review, see [Findings](#findings-milestone-1). `LyricsIsland.Core` keeps the Mac's 0.35s.*
+- **Position:** the timeline isn't pushed continuously. Compute `position = timeline.Position + (now - timeline.LastUpdatedTime)` while playing, and tick locally about 10×/s. This is the same idea as the Mac's `PlayerSnapshot.position(at:)`. Only resync when the reported position drifts more than 0.35s from the local clock. *Decided after milestone 1: the SMTC player takes every timeline report (`ResyncThreshold = 0`); 0.35s stays the default for the demo player and any other player. See [Findings](#findings-milestone-1).*
 - **Verify early:** how often Spotify updates `TimelineProperties`, and whether `LastUpdatedTime` is reliable. If the timeline is stale, add a fallback (resync on `PlaybackInfoChanged`, or estimate from the moment the track changed). *Done in milestone 1: the timeline is reliable. The fallback is still planned, see below.*
 - **Controls:** `TryTogglePlayPauseAsync`, `TrySkipNextAsync`, `TrySkipPreviousAsync`, `TryChangePlaybackPositionAsync(ticks)`. Check `playback.Controls.IsPlaybackPositionEnabled`. If Spotify doesn't allow seeking through SMTC, hide click-to-seek instead of showing a dead control. *Spotify allows seeking (milestone 1), but keep the check for other apps.*
 - **Artwork:** `props.Thumbnail.OpenReadAsync()` → `BitmapImage`.
@@ -87,7 +87,8 @@ Measured with [`windows/tools/SmtcProbe`](../windows/tools/SmtcProbe) (`--exerci
 
 What this means for the app:
 
-1. **Resync rule (proposal, needs review).** With the Mac rule (keep the local clock unless the track or play state changed or it drifts ≥ 0.35s), the clock stayed **0.11–0.15s ahead** after every seek and track change until the song ended, because the correcting report is under the threshold. The Mac needs the dead band since AppleScript positions are polled and coarse. SMTC reports are exact and timestamped, so the SMTC player could take **every new timeline report** (the jumps are ≤ 0.25s and only happen right after play, seek or a track change). `LyricsIsland.Core` keeps the Mac's 0.35s as the default; a player can override it through `IPlayer.ResyncThreshold`. Decide before milestone 3 whether the SMTC player uses 0.35 or 0.
+1. **Resync rule (decided).** With the Mac rule (keep the local clock unless the track or play state changed or it drifts ≥ 0.35s), the clock stayed **0.11–0.15s ahead** after every seek and track change until the song ended, because the correcting report is under the threshold. The Mac needs the dead band since AppleScript positions are polled and coarse. SMTC reports are exact and timestamped, so **the SMTC player uses `ResyncThreshold = 0` and the model takes every timeline report** (the jumps are ≤ 0.25s and only happen right after play, seek or a track change). The demo player and any other player keep the Mac's 0.35s default. Tests: `ZeroThresholdAppliesSmtcCorrectionsAfterSeekAndTrackChange` replays the reports Spotify sent, and `MacThresholdKeepsTheClockAheadAfterSmtcCorrections` shows why.
+   - *Watch for in milestones 3–4:* a backward correction right after a seek can briefly move the lyric line back to the previous one when the position is right at a line boundary. Don't fix it pre-emptively. If it flickers on screen, add this rule: ignore a backward line change caused by a correction of less than 0.25s within 1s after a seek or a track change.
 2. A play-state change still takes the player's position, as on the Mac. The paused position arrives together with the status event.
 3. Dedupe `MediaPropertiesChanged` by the track key so the song-change state and the lyrics fetch run once per song. The timeline arrives first, so its `EndTime` is already the new song's duration when the key is built. The order isn't guaranteed, though, so re-key if `EndTime` changes within ~1s of a track change.
 4. Never block on any of this: every SMTC call above returned in under 10 ms, but events arrive on background threads.
@@ -150,7 +151,7 @@ Where it differs from the Mac code, and why:
 
 | Difference | Why |
 |---|---|
-| The resync threshold comes from the player (`IPlayer.ResyncThreshold`, default 0.35s as on the Mac). As on the Mac, a drift of exactly 0.35s already resyncs (the Mac keeps the clock only while the drift is `< 0.35`). | Lets the SMTC player choose 0 if the [milestone 1 finding](#findings-milestone-1) is accepted. Nothing changes for the demo player. |
+| The resync threshold comes from the player (`IPlayer.ResyncThreshold`, default 0.35s as on the Mac). As on the Mac, a drift of exactly 0.35s already resyncs (the Mac keeps the clock only while the drift is `< 0.35`). | The SMTC player uses 0, as decided after the [milestone 1 findings](#findings-milestone-1). Nothing changes for the demo player. |
 | Cache file name: an ASCII prefix of the track ID plus 16 hex characters of its SHA-256. | Windows track IDs contain the title. With the Mac's "replace everything that isn't `[A-Za-z0-9_-]`", two Japanese titles by the same artist got the same file. |
 | Query values are escaped with `Uri.EscapeDataString`, so `+` becomes `%2B` and `&` becomes `%26`. | `URLComponents` on the Mac leaves `+` as is, which servers read as a space ("C++" → "C  "). Possibly worth fixing on the Mac too. |
 | Seconds are rounded half away from zero; text length counts grapheme clusters. | Matches Swift's `.rounded()` and `String.count`. .NET rounds halves to even and counts UTF-16 units by default. |
@@ -168,7 +169,39 @@ Where it differs from the Mac code, and why:
 - Use a fixed, larger transparent window (about 760×420 DIP) at the top center of the primary monitor, and animate the pill inside it. Don't resize the window per frame.
 - Per-monitor DPI awareness (PerMonitorV2) in `app.manifest`. Reposition when displays or DPI change.
 - **Fullscreen detection:** `SHQueryUserNotificationState` returns `QUNS_BUSY`, `QUNS_RUNNING_D3D_FULL_SCREEN` or `QUNS_PRESENTATION_MODE` when a fullscreen app is active. Use it for the opt-in "Hide when an app is fullscreen" setting (default off).
-- **Open question for the maintainer:** Windows has no menu bar, so a pill at the top center can cover browser tabs in maximized windows. Try *top center, 8 px from the top* first, compare it with *bottom center, just above the taskbar*, and make the position a setting if both are useful.
+- **Open question for the maintainer:** Windows has no menu bar, so a pill at the top center can cover browser tabs in maximized windows. Try *top center, 8 px from the top* first, compare it with *bottom center, just above the taskbar*, and make the position a setting if both are useful. *Compared in milestone 3, see below.*
+
+### Notes from milestone 3 (compact pill)
+
+`windows/LyricsIsland.Windows` is the WPF app. It runs the demo player only for now.
+
+- **Window:** 760×420 DIP, transparent, topmost, `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`. It's placed with `SetWindowPos` in physical pixels, centered on the primary monitor's work area, and placed again on `WM_DISPLAYCHANGE`, `WM_DPICHANGED` and `WM_SETTINGCHANGE` (`SPI_SETWORKAREA`, e.g. the taskbar moved). The pill sits 8 DIP inside the work area. In the bottom position the window reaches the bottom of the screen, so the pill's shadow can fall onto the taskbar.
+- **Click-through:** `WS_EX_TRANSPARENT` is set except while the cursor (polled with `GetCursorPos` every 100 ms) is inside the pill rect plus 3 DIP, as on the Mac.
+- **Look:** compact rows for lyric, interlude, loading, no lyrics, mini and paused, built from the Mac's `IslandView.swift` numbers. The text uses Segoe UI Variable Text Semibold 13. The pause icon is drawn as two bars, because the Segoe Fluent pause glyph is an outline and the Mac uses `pause.fill`. Off-screen renders of every state are in [`docs/screenshots/windows/`](screenshots/windows) (`LyricsIsland.exe --snapshot <dir>`).
+- **Temporary until later milestones:** no animations (milestone 4); song change shows as a compact "Title · Artist" row (milestone 4); hover-to-expand is switched off, and the expanded mode shows the compact row, until the panel exists (milestone 5); settings aren't saved and the tray menu only has Top Center / Bottom Center / Quit (milestone 6).
+
+Checked on the PC (Windows 11, 1920×1080 at 100%, taskbar at the bottom):
+
+| Check | Result |
+|---|---|
+| Placement | Window 580,0 760×420 px; pill 8 px from the top. Bottom: pill bottom 8 px above the taskbar (y 1024, taskbar from 1032). |
+| Extended styles | Tool window, no-activate and layered are set; click-through is on while the cursor is elsewhere. |
+| Click-through | Cursor elsewhere: click-through, the point belongs to the window below. Cursor on the pill: not click-through, the point belongs to the island. Cursor beside the pill (inside the window, on the shadow): click-through again. |
+| Focus | Starting the app and hovering the pill never changed the foreground window. |
+| Font | `Segoe UI Variable Text` resolves to Segoe UI Variable Text Semibold (SEGUIVAR.TTF). |
+| Size vs. Mac | The lyric pill is 268 px wide on screen and 536 px in the 2× snapshot, close to the Mac's lyric.png (564 px at 2×, measured the same way; SF Pro is a little wider than Segoe UI). |
+| CPU | 0.6% of one core with the equalizer running (Debug build). |
+
+Not checked yet: other scale factors, a DPI change while running, several monitors, and a taskbar at the top or side. The DropShadowEffect looks a little lighter than the Mac shadow at the same values (blur 24, offset 8, 35%); revisit it in milestone 4.
+
+**Top center vs. bottom center.** Both work; **top center should stay the default**, with bottom center as a setting:
+
+| | Top center (8 px from the top) | Bottom center (8 px above the taskbar) |
+|---|---|---|
+| Good | Same place as on the Mac, reads like a Dynamic Island. Nothing else lives there except the middle of a title bar. | Never covers title bars or browser tabs. |
+| Bad | In a maximized window it covers the middle of the title bar or tab strip (y 8–42). While the cursor is on the pill, whatever is beneath it can't be clicked. | Covers the bottom of maximized windows: chat input boxes, status bars, video player controls, which get used a lot while music plays. It also sits right on top of Windows 11's centered taskbar icons and looks crowded. On the PC it covered the toolbar under a chat input. |
+
+Milestone 6 should add an "Island Position: Top / Bottom" menu item (the preview tray menu already has it).
 
 ## Visual spec (from the Mac app and Figma)
 

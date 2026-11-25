@@ -1,0 +1,39 @@
+<UserControl x:Class="LyricsIsland.Windows.PillView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LyricsIsland.Windows"
+             TextOptions.TextFormattingMode="Ideal">
+    <!-- The black pill. Sizes, colors and fonts follow the "Visual spec" in docs/windows-port.md. -->
+    <Grid x:Name="Root">
+        <!-- Shadow on its own static layer, so changing content never re-renders the blur. -->
+        <Border x:Name="ShadowLayer" Background="Black" CornerRadius="17">
+            <Border.Effect>
+                <DropShadowEffect x:Name="Shadow" Color="Black" Direction="270" ShadowDepth="8"
+                                  BlurRadius="24" Opacity="0.35" RenderingBias="Quality" />
+            </Border.Effect>
+        </Border>
+
+        <Border x:Name="Body" Background="Black" CornerRadius="17" Height="34" Padding="6,0,12,0">
+            <local:HStack x:Name="Row" Spacing="10">
+                <local:PlaceholderArt x:Name="Art" Width="22" Height="22" CornerRadius="6" />
+                <!-- SF Symbol "pause.fill" at 10 pt bold: two solid bars -->
+                <Canvas x:Name="PauseGlyph" Width="8" Height="9" Visibility="Collapsed">
+                    <Rectangle Width="3" Height="9" RadiusX="0.8" RadiusY="0.8" Fill="#99FFFFFF" />
+                    <Rectangle Canvas.Left="5" Width="3" Height="9" RadiusX="0.8" RadiusY="0.8" Fill="#99FFFFFF" />
+                </Canvas>
+                <Grid x:Name="TextSlot" ClipToBounds="True" Height="18">
+                    <TextBlock x:Name="MainText" FontSize="13" FontWeight="SemiBold" Foreground="White"
+                               TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" VerticalAlignment="Center" />
+                </Grid>
+                <local:PulsingDots x:Name="Dots" Visibility="Collapsed" />
+                <Border x:Name="Chip" CornerRadius="10" Padding="8,4" Visibility="Collapsed">
+                    <TextBlock x:Name="ChipText" Text="No lyrics" FontSize="11" FontWeight="Medium" />
+                </Border>
+                <local:Equalizer x:Name="Eq" />
+            </local:HStack>
+        </Border>
+
+        <!-- 1 px inner border, white 9% -->
+        <Border x:Name="Stroke" CornerRadius="17" BorderThickness="1" BorderBrush="#17FFFFFF" IsHitTestVisible="False" />
+    </Grid>
+</UserControl>
