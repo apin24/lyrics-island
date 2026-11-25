@@ -36,7 +36,7 @@ MainActor.assumeIsolated {
         exit(0)
     }
 
-    let delegate = AppDelegate(forceDemo: args.contains("--demo"))
+    let delegate = AppDelegate(forceDemo: args.contains("--demo"), showcase: args.contains("--showcase"))
     app.delegate = delegate
     app.setActivationPolicy(.accessory)
     app.run()

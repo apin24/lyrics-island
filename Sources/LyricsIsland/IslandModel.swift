@@ -31,6 +31,10 @@ final class IslandModel: ObservableObject {
     var onManualSearch: (() -> Void)?
     /// Screen x of our own menu bar icon (set by the app delegate).
     var statusItemMinX: (() -> CGFloat?)?
+    /// Showcase mode drives hover from a script instead of the real cursor.
+    var simulatedHover: Bool?
+    /// Showcase mode ignores the real menu bar when sizing the pill.
+    var fixedMaxPillWidth: CGFloat?
 
     let settings: Settings
     private var player: PlayerSource?
@@ -196,7 +200,8 @@ final class IslandModel: ObservableObject {
         if ticks % 10 == 0 {
             let scan = MenuBarScanner.scan(ownStatusItemX: statusItemMinX?())
             if scan.fullscreen != isFullscreen { isFullscreen = scan.fullscreen }
-            if abs(scan.maxPillWidth - maxPillWidth) >= 1 { maxPillWidth = scan.maxPillWidth }
+            let width = fixedMaxPillWidth ?? scan.maxPillWidth
+            if abs(width - maxPillWidth) >= 1 { maxPillWidth = width }
             // Re-evaluate time-based states (song change, pause timeout…) even when nothing else changed.
             objectWillChange.send()
         }
@@ -210,7 +215,7 @@ final class IslandModel: ObservableObject {
         let r = pillFrameInWindow
         let rect = CGRect(x: wf.minX + r.minX, y: wf.maxY - r.maxY, width: r.width, height: r.height)
             .insetBy(dx: -3, dy: -3)
-        let inside = mode != .hidden && r.width > 0 && rect.contains(NSEvent.mouseLocation)
+        let inside = simulatedHover ?? (mode != .hidden && r.width > 0 && rect.contains(NSEvent.mouseLocation))
         if panel.ignoresMouseEvents == inside { panel.ignoresMouseEvents = !inside }
 
         if inside {

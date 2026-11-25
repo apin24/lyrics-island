@@ -222,7 +222,12 @@ final class DemoPlayer: PlayerSource {
 
     private var position: Double { base + (playing ? Date().timeIntervalSince(baseDate) : 0) }
 
+    init(startAt seconds: Double = 0) {
+        base = seconds
+    }
+
     func start() {
+        baseDate = Date()
         onIssue?(nil)
         timer = repeatingTimer(0.5) { [weak self] in self?.emit() }
         emit()

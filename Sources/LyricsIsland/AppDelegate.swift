@@ -25,13 +25,16 @@ final class ActionItem: NSMenuItem {
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let settings = Settings.shared
     private let forceDemo: Bool
+    private let showcase: Bool
     private var model: IslandModel!
     private var panel: IslandPanel!
     private var statusItem: NSStatusItem!
     private var hotKey: HotKey?
+    private var showcaseController: ShowcaseController?
 
-    init(forceDemo: Bool) {
-        self.forceDemo = forceDemo
+    init(forceDemo: Bool, showcase: Bool = false) {
+        self.forceDemo = forceDemo || showcase
+        self.showcase = showcase
         super.init()
     }
 
@@ -62,10 +65,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         connectPlayer()
         model.start()
+
+        if showcase {
+            showcaseController = ShowcaseController(model: model, panel: panel)
+            showcaseController?.run()
+        }
     }
 
     private func connectPlayer() {
-        model.attach(useDemo ? DemoPlayer() : SpotifyPlayer())
+        if showcase {
+            model.attach(DemoPlayer(startAt: 3))
+        } else {
+            model.attach(useDemo ? DemoPlayer() : SpotifyPlayer())
+        }
     }
 
     // MARK: - Status menu

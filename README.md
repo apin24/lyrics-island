@@ -4,9 +4,11 @@
 
 The current line follows the song in real time. Hover the pill and it expands into a karaoke-style lyrics panel with playback controls.
 
-![Expanded island](docs/screenshots/expanded.png)
+![Lyrics Island demo: lyrics change with the song, hovering expands the karaoke panel](docs/demo.gif)
 
-![Compact island](docs/screenshots/lyric.png)
+```bash
+brew install --cask apin24/tap/lyrics-island
+```
 
 ## Features
 
@@ -36,11 +38,39 @@ The current line follows the song in real time. Hover the pill and it expands in
 
 - macOS 14 Sonoma or later (Apple silicon or Intel)
 - The **[Spotify desktop app](https://www.spotify.com/download/mac/)**. The web player and Safari "Add to Dock" web apps can't be read by other apps.
-- Xcode Command Line Tools to build (`xcode-select --install`). Full Xcode is **not** required.
 
 ## Install
 
-Build from source. It takes about a minute:
+### Homebrew (recommended)
+
+```bash
+brew install --cask apin24/tap/lyrics-island
+```
+
+Update later with `brew upgrade --cask lyrics-island`.
+
+### Download
+
+Get `LyricsIsland-<version>.zip` from the [latest release](https://github.com/apin24/lyrics-island/releases/latest), unzip it and drag **LyricsIsland.app** into `/Applications`. It's a universal app for Apple silicon and Intel.
+
+### Allow it to open (one time)
+
+Lyrics Island isn't notarized by Apple yet (that needs a paid Apple Developer account), so macOS blocks the first launch:
+
+1. Open the app. macOS says it can't verify the developer → click **Done**.
+2. Go to **System Settings → Privacy & Security**, scroll down, click **Open Anyway** next to *"LyricsIsland" was blocked*, and confirm.
+
+Or do it in one line in Terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/LyricsIsland.app
+```
+
+All the code is in this repo, so you can also build it yourself:
+
+### Build from source
+
+Needs the Xcode Command Line Tools (`xcode-select --install`). Full Xcode is **not** required.
 
 ```bash
 git clone https://github.com/apin24/lyrics-island.git
@@ -49,12 +79,10 @@ cd lyrics-island
 open build/LyricsIsland.app
 ```
 
-Optionally move `build/LyricsIsland.app` to `/Applications` before turning on **Open at Login**.
-
 To try it without Spotify:
 
 ```bash
-open build/LyricsIsland.app --args --demo
+open /Applications/LyricsIsland.app --args --demo
 ```
 
 ### First launch
@@ -65,7 +93,7 @@ When Lyrics Island first talks to Spotify, macOS asks:
 
 Click **OK**. If you clicked *Don't Allow*, open **System Settings → Privacy & Security → Automation → Lyrics Island** and turn on **Spotify**. The 💬 menu bar icon shows a warning with a shortcut there while access is missing.
 
-> The build is ad-hoc signed, so macOS may ask again after you rebuild. That's expected.
+> If you build it yourself, macOS may ask again after each rebuild (the build is ad-hoc signed). That's expected.
 
 ## Usage
 
@@ -102,8 +130,10 @@ Click **OK**. If you clicked *Don't Allow*, open **System Settings → Privacy &
 Developer helpers:
 
 ```bash
-swift build && .build/debug/LyricsIsland --snapshot /tmp/island   # render every state to PNG
-open build/LyricsIsland.app --args --diagnose /tmp/diag.txt       # what the app can see of the menu bar
+swift build && .build/debug/LyricsIsland --snapshot /tmp/island     # render every state to PNG
+open build/LyricsIsland.app --args --diagnose /tmp/diag.txt         # what the app can see of the menu bar
+swift scripts/record-demo.swift build/LyricsIsland.app docs/demo.gif  # re-record the README GIF (--showcase)
+./scripts/package-release.sh                                        # universal .zip for a GitHub release
 ```
 
 ## Known limitations
@@ -117,7 +147,7 @@ open build/LyricsIsland.app --args --diagnose /tmp/diag.txt       # what the app
 
 ```
 Sources/LyricsIsland/
-  main.swift            entry point (--demo, --snapshot, --diagnose)
+  main.swift            entry point (--demo, --snapshot, --diagnose, --showcase)
   AppDelegate.swift     menu bar icon, menu, hotkey
   IslandPanel.swift     transparent NSPanel above the menu bar
   IslandModel.swift     state machine, timing, hover detection
@@ -128,7 +158,11 @@ Sources/LyricsIsland/
   LyricsService.swift   LRCLIB client and cache
   LRCParser.swift       .lrc parser
   Settings.swift        preferences
-scripts/build-app.sh    builds and ad-hoc signs build/LyricsIsland.app
+  Showcase.swift        scripted demo used to record the README GIF
+scripts/
+  build-app.sh          builds and ad-hoc signs build/LyricsIsland.app ("universal" = arm64 + x86_64)
+  package-release.sh    universal build → build/LyricsIsland-<version>.zip + sha256
+  record-demo.swift     screen-records --showcase and writes docs/demo.gif
 ```
 
 ## Contributing

@@ -1,21 +1,33 @@
 #!/usr/bin/env bash
 # Build LyricsIsland.app (no Xcode needed — Command Line Tools are enough).
-#   ./scripts/build-app.sh            → release build
-#   ./scripts/build-app.sh debug      → debug build
+#   ./scripts/build-app.sh             → release build for this Mac
+#   ./scripts/build-app.sh debug       → debug build
+#   ./scripts/build-app.sh universal   → release build for Apple silicon + Intel
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-CONFIG="${1:-release}"
-swift build -c "$CONFIG"
-BIN="$(swift build -c "$CONFIG" --show-bin-path)/LyricsIsland"
-
+MODE="${1:-release}"
 APP="build/LyricsIsland.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/LyricsIsland"
+
+if [ "$MODE" = "universal" ]; then
+    # Both triples can share one output folder, so copy each binary out before the next build.
+    mkdir -p build/arch
+    for ARCH in arm64 x86_64; do
+        swift build -c release --triple "$ARCH-apple-macosx14.0"
+        cp "$(swift build -c release --triple "$ARCH-apple-macosx14.0" --show-bin-path)/LyricsIsland" "build/arch/LyricsIsland-$ARCH"
+    done
+    lipo -create build/arch/LyricsIsland-arm64 build/arch/LyricsIsland-x86_64 -output "$APP/Contents/MacOS/LyricsIsland"
+    rm -rf build/arch
+else
+    swift build -c "$MODE"
+    cp "$(swift build -c "$MODE" --show-bin-path)/LyricsIsland" "$APP/Contents/MacOS/LyricsIsland"
+fi
+
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 
 # Ad-hoc signature so macOS can remember the Automation (Spotify) permission.
 codesign --force --sign - "$APP"
 
-echo "✓ $(pwd)/$APP"
+echo "✓ $(pwd)/$APP ($(lipo -archs "$APP/Contents/MacOS/LyricsIsland"))"
