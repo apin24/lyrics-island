@@ -226,18 +226,28 @@ All compact states, the song change state and the motion from `IslandView.swift`
 - Each lyric line is formatted and drawn once into its own `DrawingVisual`; a frame only moves its transform and changes its brush opacity. Re-drawing the text every frame cost ~1 ms per frame.
 - The equalizer and the dots share one 20 fps clock.
 
-Measured on a Release build, % of one core, from 3s to 23s after start (startup excluded), three runs each:
+Measured on an idle PC with a Release build, % of one core, from 3s to 23s after start (startup excluded):
 
 | Scenario | Runs | Average |
 |---|---|---|
-| A: 4 line changes in 20s | 2.77 / 2.57 / 3.14 | **2.83%** |
-| B: 2 mode changes + 1 line change in 20s | 2.42 / 3.35 / 2.91 | **2.89%** |
-| Paused, nothing moving | 1.41 / 1.26 / 1.74 | 1.47% |
-| Interlude (equalizer + dots) | 2.18 / 2.38 / 2.56 | 2.37% |
+| A: 4 line changes in 20s | 2.52 / 2.16 / 1.88 | **2.19%** |
+| B: 2 mode changes + 1 line change in 20s | 2.45 / 2.52 / 2.31 | **2.43%** |
+| Interlude (equalizer + dots), nothing else | 0.61 / 0.61 | 0.61% |
+| Paused, nothing moving | 0.81 / 0.61 | 0.71% |
 
-Caveat: these runs happened while a game was running on the PC (about two cores busy, plus a screen recorder), so they're noisy and probably high. Milestone 3's 0.6% was measured on an idle PC. Measure again on an idle PC before the release.
+(A first round taken while a game was running gave 2.8–2.9% for A and B: other load on the PC adds noticeably.)
 
-Not checked yet: **DPI 125% / 150%** and changing the scale while the app runs (the PC was in use, and changing the scale disturbs everything on screen), and a second monitor (the PC has one). Possible line flicker right after a seek can't happen yet (the demo never seeks); check it in milestone 5.
+**DPI.** Checked by changing the display scale while the app runs (`DisplayConfigSetDeviceInfo`, the same call the Settings app makes), then putting it back to 100%:
+
+| Scale | Window (px) | Pill | Gap to the edge |
+|---|---|---|---|
+| 100% | 580,0 760×420 | 34 px high | 8 px from the top |
+| 125% (live change) | 485,0 950×525 | 42 px high | 10 px from the top |
+| 150% (live change) | 390,0 1140×630 | 51 px high | 12 px from the top |
+| 150%, bottom position | 390,450 1140×630 | 945–996 | 12 px above the taskbar (work area ends at 1008) |
+| back to 100% (live change, bottom) | 580,660 760×420 | 990–1024 | 8 px above the taskbar |
+
+The window is re-centered and re-sized on every change, the gap scales with the DPI, and text, artwork and equalizer are re-rendered at the new resolution (sharp, not a scaled bitmap). Not checked: a second monitor (the PC has one). Possible line flicker right after a seek can't happen yet (the demo never seeks); check it in milestone 5.
 
 ## Visual spec (from the Mac app and Figma)
 

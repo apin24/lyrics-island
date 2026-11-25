@@ -9,7 +9,7 @@ The Windows port of Lyrics Island: C# + WPF on .NET 8, reading the current track
 | 1. SMTC probe | Done, see [Findings (milestone 1)](../docs/windows-port.md#findings-milestone-1) |
 | 2. Core library + tests | Done, see [Notes from milestone 2](../docs/windows-port.md#notes-from-milestone-2-lyricsislandcore) |
 | 3. Compact pill | Done (demo player), see [Notes from milestone 3](../docs/windows-port.md#notes-from-milestone-3-compact-pill) |
-| 4. All states + animations | Done except the DPI check, see [Notes from milestone 4](../docs/windows-port.md#notes-from-milestone-4-states-and-motion) |
+| 4. All states + animations | Done, see [Notes from milestone 4](../docs/windows-port.md#notes-from-milestone-4-states-and-motion) |
 | 5. Expanded panel | To do |
 | 6. Tray menu, settings, hotkey | To do |
 | 7. Release | To do |
