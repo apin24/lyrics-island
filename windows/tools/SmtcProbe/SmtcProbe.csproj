@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Milestone 1: console probe for the System Media Transport Controls (SMTC).
+       Prints what Windows reports about the current media session, so we know how
+       the timeline behaves before building the real player on top of it. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <!-- SMTC needs Windows 10 1809 (build 17763) or later. -->
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <RootNamespace>LyricsIsland.SmtcProbe</RootNamespace>
+    <AssemblyName>SmtcProbe</AssemblyName>
+  </PropertyGroup>
+
+</Project>
