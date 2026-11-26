@@ -11,6 +11,8 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- The Mac app's icon (docs/icon.png), for Explorer and the manual search dialog. The tray icon is drawn in code. -->
+    <ApplicationIcon>LyricsIsland.ico</ApplicationIcon>
     <RootNamespace>LyricsIsland.Windows</RootNamespace>
     <AssemblyName>LyricsIsland</AssemblyName>
     <AssemblyTitle>Lyrics Island</AssemblyTitle>
