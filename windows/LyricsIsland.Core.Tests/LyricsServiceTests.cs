@@ -45,7 +45,7 @@ public class LyricsServiceTests : IDisposable
 
         var request = Assert.Single(handler.Requests);
         Assert.Equal($"LyricsIsland/{AppInfo.Version} (Windows)", request.Headers.UserAgent.ToString());
-        Assert.Equal("0.1.0", AppInfo.Version);
+        Assert.Equal("0.2.0", AppInfo.Version);
         Assert.Equal("https://lrclib.net/", request.RequestUri!.GetLeftPart(UriPartial.Authority) + "/");
     }
 

@@ -4,7 +4,7 @@ public static class AppInfo
 {
     public const string Name = "Lyrics Island";
 
-    /// <summary>"0.1.0", from <c>&lt;Version&gt;</c> in Directory.Build.props.</summary>
+    /// <summary>"0.2.0", from <c>&lt;Version&gt;</c> in Directory.Build.props.</summary>
     public static string Version { get; } = typeof(AppInfo).Assembly.GetName().Version is { } v
         ? $"{v.Major}.{v.Minor}.{v.Build}"
         : "0.0.0";
