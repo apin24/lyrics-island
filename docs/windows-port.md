@@ -303,7 +303,7 @@ Checked against the real Spotify app (Microsoft Store version) by moving and cli
 
 **Panel closing by itself (fixed).** Cause: when a two-line karaoke line was followed by a one-line one, the panel got shorter, the progress bar and buttons moved up from under a resting cursor, the cursor was outside the pill, and the panel closed 1 s later. Now the lyrics area never shrinks while the panel is open: it keeps the tallest height it reached and starts over on the next expand. Checked with Text Size Large (where "but the night has never been this quiet" takes two lines), the cursor resting on play/pause and six clicks 1.5 s apart across the change to a one-line line: the panel stayed 305 px tall and open, all six clicks toggled playback, and the log showed no "hover out" until the cursor left.
 
-**Quick clicks.** Within 120 DIP of the pill the cursor is polled about 64 times a second (a 15 ms `DispatcherTimer`, so never faster than the system tick); further away it stays at 10 per second. Only click-through follows the fast polling; the hover timing stays on the 100 ms tick. Moving to 80 px below the pill, then onto it and clicking 30 ms later reached the pill 5 out of 5 times (click-through off in the same millisecond the cursor was seen inside, mouse-up 65–87 ms later). With the cursor resting near the pill, CPU went from 2.42% to 2.96% of one core. The fast tick now reuses the pill's screen rect from the 100 ms tick unless the pill is animating, and builds the trace text only when the hover state flips. *The CPU and quick-click numbers for that last change still need to be measured: the cursor couldn't be moved from a script while a Chrome Remote Desktop session was in the foreground (UIPI).*
+**Quick clicks.** Within 120 DIP of the pill the cursor is polled about 64 times a second (a 15 ms `DispatcherTimer`, so never faster than the system tick); further away it stays at 10 per second. Only click-through follows the fast polling; the hover timing stays on the 100 ms tick. Moving to 80 px below the pill, then onto it and clicking 30 ms later reached the pill 5 out of 5 times (click-through off in the same millisecond the cursor was seen inside, mouse-up 65–87 ms later). With the cursor resting near the pill, CPU went from 2.42% to 2.96% of one core. The fast tick now reuses the pill's screen rect from the 100 ms tick unless the pill is animating, and builds the trace text only when the hover state flips. *Measured after that change in milestone 7 (a Chrome Remote Desktop session had blocked moving the cursor from a script): see "Checks left over from milestone 6" below.*
 
 **Settings** are loaded from `%APPDATA%\LyricsIsland\settings.json` at start and saved on every change; `placement` (top/bottom) is new. Everything takes effect at once: the model reacts to visibility, hover, fullscreen, text size and offsets; the window moves for the position; the demo player and the media controls are swapped for Demo Mode; `--demo` forces the demo and greys out the item. Only one island runs per user session (a named mutex).
 
@@ -327,7 +327,7 @@ Checked live by opening the menu (`--show-menu`) and clicking its items through 
 |---|---|
 | Bottom position with the panel open (`--expand`) | The panel grows upwards; its bottom edge is 8 px above the taskbar (pill 737–1024 px, taskbar from 1032), and the shadow falls onto the taskbar. |
 | Manual search, live (menu → dialog, through UI Automation) | Opens with the song's title and artist filled in. A query LRCLIB doesn't know shows "LRCLIB has no synced lyrics for …". A known song closes the dialog, stores the result (65 lines) and shows it at once. The user's lyrics cache was backed up and restored byte for byte. |
-| Ctrl+Alt+L | Registered, but not tested: injected keys were blocked for the same UIPI reason as the cursor. |
+| Ctrl+Alt+L | Registered; injected keys were blocked for the same UIPI reason as the cursor. Tested in milestone 7: toggles the island. |
 
 ### Notes from milestone 7 (release)
 
@@ -366,7 +366,15 @@ Symbols are embedded (`DebugType=embedded` for single-file publishes), so no `.p
 
 SmartScreen was answered through UI Automation (its prompt is an untitled `ApplicationFrameWindow` of explorer.exe). Smart App Control is off on this PC; when it's on, it blocks unsigned apps without a Run anyway button.
 
-**Not tested yet:** the Arm64 zip (no Arm PC here), the light menu (this PC is in dark mode, and changing it is a system setting), scaling other than 100/125/150%, several monitors, a taskbar on the side or top, Spotify from spotify.com (only the Store version), the web player in a browser, and three checks that need the real cursor and keyboard, which a remote desktop session blocked: a quick click after the cached pill rectangle, CPU with the cursor resting near the pill since that change, and Ctrl+Alt+L.
+**Checks left over from milestone 6**, done once no remote desktop session was in the foreground, with the x64 release exe and a test settings file:
+
+| Check | Result |
+|---|---|
+| Quick clicks after the cached pill rect (cursor 80 px below the pill, then onto it, click 30 ms later) | 10 out of 10 reached the pill. Click-through went off in the same millisecond the cursor was seen inside; mouse-up 53–82 ms later. A plain window placed right under the island (created before it) caught no click, so none passed through. |
+| CPU, interlude, cursor far vs. resting 80 px below the pill (4 runs each, alternating, cycles) | Far 2.33% (2.31–2.37), near 2.60% (2.56–2.64) of one core. The fast polling now costs +0.27%, half of the +0.54% before the cached rect (2.42% → 2.96%). Chrome was using about one core in the background meanwhile; it isn't counted in the island's cycles. |
+| Ctrl+Alt+L (keys only sent after `--diagnose` showed the hotkey registered) | First press: island hidden, `showIsland` false; second press: back to the lyric, `showIsland` true and saved. |
+
+**Not tested yet:** the Arm64 zip (no Arm PC here), the light menu (this PC is in dark mode, and changing it is a system setting), scaling other than 100/125/150%, several monitors, a taskbar on the side or top, Spotify from spotify.com (only the Store version), and the web player in a browser.
 
 
 ## Visual spec (from the Mac app and Figma)
