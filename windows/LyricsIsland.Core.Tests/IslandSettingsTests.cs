@@ -18,7 +18,31 @@ public class IslandSettingsTests : IDisposable
         Assert.Equal(TextSize.Medium, s.TextSize);
         Assert.False(s.DemoMode);
         Assert.False(s.HideInFullscreen);
+        Assert.Equal(IslandPlacement.Top, s.Placement);
         Assert.Empty(s.Offsets);
+    }
+
+    [Fact]
+    public void PlacementIsSavedAndLoaded()
+    {
+        var path = _dir.File("settings.json");
+        new IslandSettings { Placement = IslandPlacement.Bottom }.Save(path);
+
+        Assert.Equal(IslandPlacement.Bottom, IslandSettings.Load(path).Placement);
+        Assert.Contains("\"placement\": \"bottom\"", File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void FilesFromBeforePlacementExistedStillLoad()
+    {
+        var path = _dir.File("settings.json");
+        File.WriteAllText(path, """{"showIsland": false, "textSize": "large"}""");
+
+        var s = IslandSettings.Load(path);
+
+        Assert.False(s.ShowIsland);
+        Assert.Equal(TextSize.Large, s.TextSize);
+        Assert.Equal(IslandPlacement.Top, s.Placement);
     }
 
     [Theory]

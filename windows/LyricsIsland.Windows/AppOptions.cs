@@ -1,4 +1,5 @@
 using System.Globalization;
+using LyricsIsland.Core;
 
 namespace LyricsIsland.Windows;
 
@@ -14,7 +15,17 @@ public sealed record AppOptions
     /// <summary>Pause the demo after this many seconds (0 = right away; checks of the paused state).</summary>
     public double? PauseAfter { get; init; }
 
-    public IslandPosition Position { get; init; } = IslandPosition.Top;
+    /// <summary>Overrides (and saves) the island position for this run.</summary>
+    public IslandPlacement? Position { get; init; }
+
+    /// <summary>Use this settings file instead of %APPDATA%\LyricsIsland\settings.json (tests).</summary>
+    public string? SettingsFile { get; init; }
+
+    /// <summary>Keep the panel open as if hovered (screenshots without moving the cursor).</summary>
+    public bool Expand { get; init; }
+
+    /// <summary>Open the tray menu at this screen point after start ("x,y", px), for screenshots.</summary>
+    public (int X, int Y)? ShowMenuAt { get; init; }
 
     /// <summary>Render every pill state to PNG files in this folder and exit.</summary>
     public string? SnapshotDirectory { get; init; }
@@ -45,6 +56,9 @@ public sealed record AppOptions
         return numbers.Any(double.IsNaN) ? null : (numbers[0], numbers[1], numbers[2]);
     }
 
+    private static (int, int)? ParsePoint(string? value) =>
+        value?.Split(',') is [var x, var y] && int.TryParse(x, out var px) && int.TryParse(y, out var py) ? (px, py) : null;
+
     public static AppOptions Parse(string[] args)
     {
         var options = new AppOptions();
@@ -61,7 +75,7 @@ public sealed record AppOptions
                 "--pause-after" => options with { PauseAfter = Number() },
                 "--position" => options with
                 {
-                    Position = Next()?.ToLowerInvariant() == "bottom" ? IslandPosition.Bottom : IslandPosition.Top,
+                    Position = Next()?.ToLowerInvariant() == "bottom" ? IslandPlacement.Bottom : IslandPlacement.Top,
                 },
                 "--snapshot" => options with { SnapshotDirectory = Next() },
                 "--record" => options with { RecordDirectory = Next() },
@@ -70,6 +84,9 @@ public sealed record AppOptions
                 "--diagnose-every" => options with { DiagnoseSeconds = Number() ?? 2 },
                 "--exit-after" => options with { ExitAfter = Number() },
                 "--shadow" => options with { Shadow = ParseShadow(Next()) },
+                "--settings" => options with { SettingsFile = Next() },
+                "--expand" => options with { Expand = true },
+                "--show-menu" => options with { ShowMenuAt = ParsePoint(Next()) },
                 _ => options,
             };
         }

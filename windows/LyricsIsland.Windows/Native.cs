@@ -15,6 +15,10 @@ internal static partial class Native
     public const int WM_DISPLAYCHANGE = 0x007E;
     public const int WM_SETTINGCHANGE = 0x001A;
     public const int WM_DPICHANGED = 0x02E0;
+    public const int WM_HOTKEY = 0x0312;
+    public const uint MOD_ALT = 0x0001;
+    public const uint MOD_CONTROL = 0x0002;
+    public const uint MOD_NOREPEAT = 0x4000;
     public const int SPI_SETWORKAREA = 0x002F;
 
     public const uint MONITOR_DEFAULTTOPRIMARY = 1;
@@ -79,6 +83,14 @@ internal static partial class Native
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetWindowRect(nint hWnd, out RECT rect);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool RegisterHotKey(nint hWnd, int id, uint modifiers, uint virtualKey);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool UnregisterHotKey(nint hWnd, int id);
 
     /// <summary>QUNS_BUSY (2), QUNS_RUNNING_D3D_FULL_SCREEN (3) and QUNS_PRESENTATION_MODE (4) mean a fullscreen app is active.</summary>
     [LibraryImport("shell32.dll")]

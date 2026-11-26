@@ -6,6 +6,13 @@ using System.Text.Json.Serialization;
 
 namespace LyricsIsland.Core;
 
+/// <summary>Where the island sits: top center (default) or bottom center, above the taskbar.</summary>
+public enum IslandPlacement
+{
+    Top,
+    Bottom,
+}
+
 public enum TextSize
 {
     Small,
@@ -41,6 +48,7 @@ public sealed class IslandSettings : INotifyPropertyChanged
     private TextSize _textSize = TextSize.Medium;
     private bool _demoMode;
     private bool _hideInFullscreen;
+    private IslandPlacement _placement = IslandPlacement.Top;
     private readonly Dictionary<string, double> _offsets = new(StringComparer.Ordinal);
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -50,6 +58,9 @@ public sealed class IslandSettings : INotifyPropertyChanged
     public TextSize TextSize { get => _textSize; set => Set(ref _textSize, value); }
     public bool DemoMode { get => _demoMode; set => Set(ref _demoMode, value); }
     public bool HideInFullscreen { get => _hideInFullscreen; set => Set(ref _hideInFullscreen, value); }
+
+    /// <summary>Windows only: top center or bottom center (above the taskbar).</summary>
+    public IslandPlacement Placement { get => _placement; set => Set(ref _placement, value); }
 
     /// <summary>Per-track lyric offsets in seconds, by track ID.</summary>
     public IReadOnlyDictionary<string, double> Offsets => _offsets;
@@ -94,6 +105,7 @@ public sealed class IslandSettings : INotifyPropertyChanged
         settings._textSize = file.TextSize is { } size && Enum.IsDefined(size) ? size : settings._textSize;
         settings._demoMode = file.DemoMode ?? settings._demoMode;
         settings._hideInFullscreen = file.HideInFullscreen ?? settings._hideInFullscreen;
+        settings._placement = file.Placement is { } placement && Enum.IsDefined(placement) ? placement : settings._placement;
         foreach (var (id, offset) in file.Offsets ?? [])
         {
             if (double.IsFinite(offset) && Math.Abs(offset) >= 0.05) settings._offsets[id] = offset;
@@ -104,7 +116,7 @@ public sealed class IslandSettings : INotifyPropertyChanged
     /// <summary>Writes the settings to <paramref name="path"/> (via a temp file, so a crash can't leave half a file).</summary>
     public void Save(string path)
     {
-        var file = new SettingsFile(_showIsland, _expandOnHover, _textSize, _demoMode, _hideInFullscreen,
+        var file = new SettingsFile(_showIsland, _expandOnHover, _textSize, _demoMode, _hideInFullscreen, _placement,
             new Dictionary<string, double>(_offsets, StringComparer.Ordinal));
         if (Path.GetDirectoryName(path) is { Length: > 0 } dir) Directory.CreateDirectory(dir);
         var temp = path + ".tmp";
@@ -141,5 +153,6 @@ public sealed class IslandSettings : INotifyPropertyChanged
         TextSize? TextSize,
         bool? DemoMode,
         bool? HideInFullscreen,
+        IslandPlacement? Placement,
         Dictionary<string, double>? Offsets);
 }

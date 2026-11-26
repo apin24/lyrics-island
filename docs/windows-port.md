@@ -295,7 +295,40 @@ Checked against the real Spotify app (Microsoft Store version) by moving and cli
 - **Line flicker after a seek: not seen.** Across 4 seeks the line index went straight to the target and never back (e.g. 42 → 43 → 44, no 41). Spotify's backward correction after a seek is relative to our extrapolation, not to the seek target: after seeking to "line start + 0.05s" the position only drops to about the target + 0.01s, still past the line start. A flicker would need a seek (e.g. from Spotify itself) landing less than ~0.1s before a line boundary. As agreed, no extra rule.
 - **Click-through and fast clicks.** The window stops being click-through on the next 100 ms tick after the cursor arrives, like the Mac. A click within ~100 ms of moving onto the pill goes to the window below it. People don't click that fast after arriving; the test script now rests 250 ms first.
 - **Seen twice, not reproduced since:** in two scripted runs the panel collapsed about 1–1.5s after a click on play/pause while the cursor was still on the panel. Three later runs (demo and Spotify) didn't show it. A likely cause is the panel getting shorter under a still cursor (a two-line karaoke line followed by a one-line one), or a stale click target in the script. `--log-lines` now also logs every hover in/out with the cursor and the pill rect, so the next occurrence shows the reason.
-- Not checked live: the manual search dialog (it needs a song without lyrics, and storing a search result changes the user's cache), and the panel in the bottom position.
+- Not checked live: the manual search dialog (it needs a song without lyrics, and storing a search result changes the user's cache), and the panel in the bottom position. *Both checked in milestone 6, see below.*
+
+**Decided after review:** the window stays 760×420; the equalizer stays at its real 16 fps.
+
+### Notes from milestone 6 (tray menu, settings, follow-ups)
+
+**Panel closing by itself (fixed).** Cause: when a two-line karaoke line was followed by a one-line one, the panel got shorter, the progress bar and buttons moved up from under a resting cursor, the cursor was outside the pill, and the panel closed 1 s later. Now the lyrics area never shrinks while the panel is open: it keeps the tallest height it reached and starts over on the next expand. Checked with Text Size Large (where "but the night has never been this quiet" takes two lines), the cursor resting on play/pause and six clicks 1.5 s apart across the change to a one-line line: the panel stayed 305 px tall and open, all six clicks toggled playback, and the log showed no "hover out" until the cursor left.
+
+**Quick clicks.** Within 120 DIP of the pill the cursor is polled about 64 times a second (a 15 ms `DispatcherTimer`, so never faster than the system tick); further away it stays at 10 per second. Only click-through follows the fast polling; the hover timing stays on the 100 ms tick. Moving to 80 px below the pill, then onto it and clicking 30 ms later reached the pill 5 out of 5 times (click-through off in the same millisecond the cursor was seen inside, mouse-up 65–87 ms later). With the cursor resting near the pill, CPU went from 2.42% to 2.96% of one core. The fast tick now reuses the pill's screen rect from the 100 ms tick unless the pill is animating, and builds the trace text only when the hover state flips. *The CPU and quick-click numbers for that last change still need to be measured: the cursor couldn't be moved from a script while a Chrome Remote Desktop session was in the foreground (UIPI).*
+
+**Settings** are loaded from `%APPDATA%\LyricsIsland\settings.json` at start and saved on every change; `placement` (top/bottom) is new. Everything takes effect at once: the model reacts to visibility, hover, fullscreen, text size and offsets; the window moves for the position; the demo player and the media controls are swapped for Demo Mode; `--demo` forces the demo and greys out the item. Only one island runs per user session (a named mutex).
+
+**Tray menu** ([screenshot](screenshots/windows/tray-menu.png)), same order as AppDelegate.swift: "Lyrics Island", "Now playing: Title — Artist" (or "Demo mode" / "Spotify isn't playing"), a warning with a link to Spotify when no supported player is found, Show Island (Ctrl+Alt+L), Expand on Hover, Hide When an App Is Fullscreen, Text Size, Island Position (Windows only), Lyrics Timing (±0.0s) with Too Early / Too Late / Reset, Search Lyrics Manually…, Demo Mode (No Spotify Needed), Start with Windows (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `LyricsIsland`), Quit Lyrics Island. The menu is rebuilt each time it opens, so labels and check marks are current. Ctrl+Alt+L is a global hotkey (`RegisterHotKey`); if another app owns it, the menu says "(in use)".
+
+Checked live by opening the menu (`--show-menu`) and clicking its items through UI Automation, with a test settings file, reading `--diagnose` right after each click and starting the app again for the next step:
+
+| Item | Right away | After a restart |
+|---|---|---|
+| Expand on Hover | on → off | |
+| Text Size ▸ Large | Medium → Large | still Large |
+| Hide When an App Is Fullscreen | off → on | |
+| Lyrics Timing ▸ Too Late | +0.5s stored for the song | |
+| Island Position ▸ Bottom / Top | window moved to y 660 px / back to 0 | still Bottom |
+| Show Island off / on | hidden at once / back | |
+| Start with Windows on / off | Run value = quoted path of the exe / removed | |
+| Demo Mode on / off | Spotify → demo → Spotify, no restart | |
+| Quit Lyrics Island | process exited | |
+
+| Other check | Result |
+|---|---|
+| Bottom position with the panel open (`--expand`) | The panel grows upwards; its bottom edge is 8 px above the taskbar (pill 737–1024 px, taskbar from 1032), and the shadow falls onto the taskbar. |
+| Manual search, live (menu → dialog, through UI Automation) | Opens with the song's title and artist filled in. A query LRCLIB doesn't know shows "LRCLIB has no synced lyrics for …". A known song closes the dialog, stores the result (65 lines) and shows it at once. The user's lyrics cache was backed up and restored byte for byte. |
+| Ctrl+Alt+L | Registered, but not tested: injected keys were blocked for the same UIPI reason as the cursor. |
+
 
 ## Visual spec (from the Mac app and Figma)
 

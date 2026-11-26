@@ -7,14 +7,6 @@ using LyricsIsland.Core;
 
 namespace LyricsIsland.Windows;
 
-public enum IslandPosition
-{
-    /// <summary>Top center, 8 px below the top of the work area.</summary>
-    Top,
-    /// <summary>Bottom center, 8 px above the taskbar.</summary>
-    Bottom,
-}
-
 /// <summary>
 /// Transparent, topmost, never-activated window at the top (or bottom) center of the primary monitor.
 /// It's click-through everywhere except over the pill: WS_EX_TRANSPARENT is turned off only while
@@ -28,27 +20,44 @@ public partial class IslandWindow : Window
     /// <summary>The Mac pads the pill's hover rect by 3 points on each side.</summary>
     private const double HoverPadding = 3;
 
+    /// <summary>Within this distance of the pill (DIP) the cursor is polled ~64×/s instead of 10×/s.</summary>
+    private const double NearDistance = 120;
+
     private readonly IslandModel _model;
     private readonly DispatcherTimer _timer;
+    private readonly DispatcherTimer _nearTimer;
+    private long _nearTicks;
     private nint _hwnd;
     private bool _clickThrough = true;
     private int _ticks;
     private double _scale = 1;
 
-    public IslandWindow(IslandModel model, IslandPosition position)
+    public IslandWindow(IslandModel model, IslandPlacement position)
     {
         InitializeComponent();
         _model = model;
         Position = position;
         _timer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(100) };
         _timer.Tick += (_, _) => Tick();
+        // 15 ms: fires on every system tick (~64 Hz), never faster even if the timer resolution was raised.
+        _nearTimer = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(15) };
+        _nearTimer.Tick += (_, _) => NearTick();
         SourceInitialized += OnSourceInitialized;
         _model.PropertyChanged += (_, _) => Pill.Render(_model);
         // Clicking the compact pill expands it right away (the Mac's expandNow()).
         Pill.CompactClicked += () => _model.ExpandNow();
+        Pill.Clicked += message => Trace?.Invoke(message);
     }
 
-    public IslandPosition Position { get; private set; }
+    public IslandPlacement Position { get; private set; }
+
+    /// <summary>Ctrl+Alt+L was pressed anywhere (Show Island).</summary>
+    public event Action? HotkeyPressed;
+
+    /// <summary>False when another app already owns Ctrl+Alt+L.</summary>
+    public bool HotkeyRegistered { get; private set; }
+
+    private const int HotkeyId = 0x4C49; // "LI"
 
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
@@ -59,12 +68,15 @@ public partial class IslandWindow : Window
         Native.SetWindowLongPtr(_hwnd, Native.GWL_EXSTYLE, (nint)style);
 
         HwndSource.FromHwnd(_hwnd)?.AddHook(WndProc);
+        // Ctrl+Alt+L, the Windows counterpart of the Mac's ⌥⌘L.
+        HotkeyRegistered = Native.RegisterHotKey(_hwnd, HotkeyId, Native.MOD_CONTROL | Native.MOD_ALT | Native.MOD_NOREPEAT, 'L');
+        Closed += (_, _) => Native.UnregisterHotKey(_hwnd, HotkeyId);
         PlaceOnPrimaryMonitor();
         Pill.Render(_model);
         _timer.Start();
     }
 
-    public void SetPosition(IslandPosition position)
+    public void SetPosition(IslandPlacement position)
     {
         Position = position;
         PlaceOnPrimaryMonitor();
@@ -80,7 +92,7 @@ public partial class IslandWindow : Window
         var height = (int)Math.Round(WindowHeight * scale);
         var x = work.Left + (work.Width - width) / 2;
         int y;
-        if (Position == IslandPosition.Top)
+        if (Position == IslandPlacement.Top)
         {
             y = work.Top;
             Pill.AnchorTop = true;
@@ -100,6 +112,12 @@ public partial class IslandWindow : Window
 
     private nint WndProc(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
     {
+        if (msg == Native.WM_HOTKEY && wParam == HotkeyId)
+        {
+            HotkeyPressed?.Invoke();
+            handled = true;
+            return 0;
+        }
         var reposition = msg switch
         {
             Native.WM_DISPLAYCHANGE or Native.WM_DPICHANGED => true,
@@ -129,36 +147,66 @@ public partial class IslandWindow : Window
         {
             _model.IsFullscreen = false;
         }
-        _model.Tick(CursorOverPill());
+        var (over, near) = Probe();
+        _model.Tick(over);
         SetClickThrough(!_model.AcceptsMouse);
         Pill.Render(_model);
+        // Close to the pill, poll faster so a quick click lands on the pill instead of falling through.
+        if (near && !_nearTimer.IsEnabled) _nearTimer.Start();
+        else if (!near && _nearTimer.IsEnabled) _nearTimer.Stop();
         _tickTime.Stop();
+    }
+
+    /// <summary>~64×/s while the cursor is near the pill: only click-through follows; hover timing stays on the 100 ms tick.</summary>
+    private void NearTick()
+    {
+        _nearTicks++;
+        // The pill's screen rect from the last 100 ms tick is good enough unless the pill is moving.
+        var (over, near) = Probe(refreshRect: !Animator.IsIdle);
+        if (!near)
+        {
+            _nearTimer.Stop();
+            return;
+        }
+        // Same rule as IslandModel.AcceptsMouse: take input only over a visible pill.
+        SetClickThrough(!(over && _model.Mode != IslandMode.Hidden));
     }
 
     /// <summary>Gets a line whenever the hover hit test flips (for <c>--log-lines</c>).</summary>
     public Action<string>? Trace { get; set; }
 
     private bool? _lastOver;
+    private Rect? _pillRect;
 
-    private bool CursorOverPill()
+    private bool CursorOverPill() => Probe().Over;
+
+    /// <summary>Is the cursor over the pill (plus 3 DIP), and within <see cref="NearDistance"/> of it?</summary>
+    private (bool Over, bool Near) Probe(bool refreshRect = true)
     {
-        string why;
-        bool over;
-        if (Pill.HitArea is not { } area) (over, why) = (false, "no hit area (pill hidden or leaving)");
-        else if (!Native.GetCursorPos(out var cursor)) (over, why) = (false, "GetCursorPos failed");
-        else
+        if (refreshRect || _pillRect is null) _pillRect = Pill.HitArea is { } area ? ScreenRect(area) : null;
+        bool over = false, near = false;
+        var gotCursor = Native.GetCursorPos(out var cursor);
+        if (_pillRect is { } pill && gotCursor)
         {
-            var rect = ScreenRect(area);
+            var around = pill;
+            around.Inflate(NearDistance * _scale, NearDistance * _scale);
+            near = around.Contains(cursor.X, cursor.Y);
+            var rect = pill;
             rect.Inflate(HoverPadding * _scale, HoverPadding * _scale);
             over = rect.Contains(cursor.X, cursor.Y);
-            why = $"cursor {cursor.X},{cursor.Y} rect {rect.X:0},{rect.Y:0} {rect.Width:0}x{rect.Height:0}";
         }
         if (over != _lastOver)
         {
             _lastOver = over;
-            Trace?.Invoke($"hover {(over ? "in" : "out")}: {why}");
+            if (Trace is { } trace)
+            {
+                var why = _pillRect is not { } r ? "no hit area (pill hidden or leaving)"
+                    : !gotCursor ? "GetCursorPos failed"
+                    : $"cursor {cursor.X},{cursor.Y} rect {r.X:0},{r.Y:0} {r.Width:0}x{r.Height:0}";
+                trace($"hover {(over ? "in" : "out")}: {why}");
+            }
         }
-        return over;
+        return (over, near);
     }
 
     /// <summary>An element's bounds in screen pixels.</summary>
@@ -176,6 +224,7 @@ public partial class IslandWindow : Window
         var style = (long)Native.GetWindowLongPtr(_hwnd, Native.GWL_EXSTYLE);
         style = clickThrough ? style | Native.WS_EX_TRANSPARENT : style & ~Native.WS_EX_TRANSPARENT;
         Native.SetWindowLongPtr(_hwnd, Native.GWL_EXSTYLE, (nint)style);
+        Trace?.Invoke($"click-through {(clickThrough ? "on" : "off")}");
     }
 
     /// <summary>What the window looks like to Windows, for <c>--diagnose</c>.</summary>
@@ -207,6 +256,7 @@ public partial class IslandWindow : Window
         sb.AppendLine($"accepts mouse: {_model.AcceptsMouse}, expanded: {_model.IsExpanded}, cursor: {cursor.X},{cursor.Y}, over pill: {CursorOverPill()}");
         sb.AppendLine($"animator: {Animator.Describe()}");
         sb.AppendLine($"20 fps clock: {AnimatedElement.DescribeTicking()}");
+        sb.AppendLine($"fast hover polling: {(_nearTimer.IsEnabled ? "on" : "off")}, {_nearTicks} fast ticks so far");
         sb.AppendLine($"ticks: {_ticks}, {_tickTime.Elapsed.TotalMilliseconds * 1000 / Math.Max(1, _ticks):0} µs each on average; " +
                       $"fullscreen checks took {_fullscreenTime.Elapsed.TotalMilliseconds:0.0} ms in total");
         var renderMode = HwndSource.FromHwnd(_hwnd)?.CompositionTarget?.RenderMode.ToString() ?? "?";

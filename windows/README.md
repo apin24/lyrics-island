@@ -11,7 +11,7 @@ The Windows port of Lyrics Island: C# + WPF on .NET 8, reading the current track
 | 3. Compact pill | Done (demo player), see [Notes from milestone 3](../docs/windows-port.md#notes-from-milestone-3-compact-pill) |
 | 4. All states + animations | Done; CPU is above the 3% target while the equalizer runs, see [Notes from milestone 4](../docs/windows-port.md#notes-from-milestone-4-states-and-motion) |
 | 5. Expanded panel + Spotify | Done, see [Notes from milestone 5](../docs/windows-port.md#notes-from-milestone-5-hover-panel-spotify) |
-| 6. Tray menu, settings, hotkey | To do |
+| 6. Tray menu, settings, hotkey | Done, see [Notes from milestone 6](../docs/windows-port.md#notes-from-milestone-6-tray-menu-settings-follow-ups) |
 | 7. Release | To do |
 
 ## Requirements
@@ -39,13 +39,16 @@ cd windows
 dotnet run --project LyricsIsland.Windows
 ```
 
-It follows whatever Spotify (or, without Spotify, the current media session) is playing. Hover the pill to open the panel; click a line or the progress bar to seek. Quit from the tray icon (the white speech bubble in the notification area), which can also move the island between the top and bottom center.
+It follows whatever Spotify (or, without Spotify, the current media session) is playing. Hover the pill to open the panel; click a line or the progress bar to seek. Everything else is in the tray icon's menu (the white speech bubble in the notification area): show/hide (also Ctrl+Alt+L), hover, fullscreen, text size, top or bottom position, lyrics timing, manual search, demo mode, start with Windows and quit. Settings are saved in `%APPDATA%\LyricsIsland\settings.json`.
 
 | Option | Meaning |
 |---|---|
 | `--demo` | Play the fictional demo song instead of following Spotify |
 | `--demo-start <sec>` | Demo, starting at this position |
-| `--position top\|bottom` | Top center (default) or bottom center above the taskbar |
+| `--position top\|bottom` | Set the position (saved like the menu item) |
+| `--settings <file>` | Use another settings file (tests) |
+| `--expand` | Keep the panel open as if hovered (screenshots) |
+| `--show-menu <x,y>` | Open the tray menu at this screen point after start (screenshots, UI Automation tests) |
 | `--start-paused`, `--pause-after <sec>` | Pause the demo right away / after a while |
 | `--snapshot <dir>` | Render every pill state and the hover panel to PNG (2×, flat background), plus the lyric pill at 125% and 150%, and exit |
 | `--record <dir>` | Write the frames of a scripted demo (25 fps, off screen) and exit; `tools/record-demo.ps1` turns them into a GIF with ffmpeg |

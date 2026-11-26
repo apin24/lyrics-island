@@ -222,23 +222,33 @@ public sealed class ExpandedLyrics : Panel
     protected override Size MeasureOverride(Size available)
     {
         var width = double.IsInfinity(available.Width) ? ExpandedPanel.PanelWidth - 40 : available.Width;
+        double height;
         if (_message is not null)
         {
             _message.Measure(new Size(width, double.PositiveInfinity));
-            return new Size(width, Math.Max(MinimumHeight, _message.DesiredSize.Height));
+            height = _message.DesiredSize.Height;
         }
-        var height = 0.0;
-        var count = 0;
-        foreach (var line in _lines.Values)
+        else
         {
-            line.Measure(new Size(width, double.PositiveInfinity));
-            height += line.DesiredSize.Height;
-            count++;
+            height = 0;
+            var count = 0;
+            foreach (var line in _lines.Values)
+            {
+                line.Measure(new Size(width, double.PositiveInfinity));
+                height += line.DesiredSize.Height;
+                count++;
+            }
+            foreach (var line in _leaving) line.Measure(new Size(width, double.PositiveInfinity));
+            height += Spacing * Math.Max(0, count - 1);
         }
-        foreach (var line in _leaving) line.Measure(new Size(width, double.PositiveInfinity));
-        height += Spacing * Math.Max(0, count - 1);
-        return new Size(width, Math.Max(MinimumHeight, height));
+        // Never shrink while the panel is open: when a two-line karaoke line is followed by a one-line one,
+        // the progress bar and the buttons would move up from under a resting cursor, the cursor would end
+        // up outside the pill, and the panel would close by itself 1 s later. A new panel (next hover) starts over.
+        _tallest = Math.Max(_tallest, Math.Max(MinimumHeight, height));
+        return new Size(width, _tallest);
     }
+
+    private double _tallest;
 
     protected override Size ArrangeOverride(Size final)
     {

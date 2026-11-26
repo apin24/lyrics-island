@@ -107,6 +107,9 @@ public static class Animator
     /// <summary>When true, nothing runs on its own; call <see cref="StepAll"/> to advance time.</summary>
     public static bool Manual { get; set; }
 
+    /// <summary>Nothing is animating right now.</summary>
+    public static bool IsIdle => Running.Count == 0;
+
     /// <summary>Frames stepped since start (for <c>--diagnose</c>).</summary>
     public static long FramesStepped { get; private set; }
 

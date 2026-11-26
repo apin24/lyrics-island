@@ -37,6 +37,9 @@ public partial class PillView : UserControl, IAnimated
     /// <summary>The compact pill (not the panel) was clicked: expand right away.</summary>
     public event Action? CompactClicked;
 
+    /// <summary>Any mouse-up on the pill, for <c>--log-lines</c>.</summary>
+    public event Action<string>? Clicked;
+
     // Settle thresholds: a quarter pixel, below what can be seen (presence: 0.3% of the scale ≈ 1 px of a wide pill).
     private readonly Spring _width = new(Spring.Mode.Response, Spring.Mode.Damping, epsilon: 0.25);
     private readonly Spring _height = new(Spring.Mode.Response, Spring.Mode.Damping, epsilon: 0.25);
@@ -55,6 +58,7 @@ public partial class PillView : UserControl, IAnimated
         SetShadow(CompactShadow);
         Frame.MouseLeftButtonUp += (_, e) =>
         {
+            Clicked?.Invoke($"mouse up on the pill (row {_row?.Kind}, handled {e.Handled})");
             if (e.Handled || _row is null || _row.Kind == RowKind.Expanded) return;
             CompactClicked?.Invoke();
             e.Handled = true;

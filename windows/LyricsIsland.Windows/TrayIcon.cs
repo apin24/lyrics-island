@@ -1,42 +1,152 @@
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
+using LyricsIsland.Core;
 using Forms = System.Windows.Forms;
 
 namespace LyricsIsland.Windows;
 
+/// <summary>What the tray menu needs from the app.</summary>
+public interface ITrayHost
+{
+    IslandModel Model { get; }
+    IslandSettings Settings { get; }
+
+    /// <summary>The demo player is running (by setting or by <c>--demo</c>).</summary>
+    bool UsingDemo { get; }
+
+    /// <summary><c>--demo</c> forces demo mode; the menu item is then disabled.</summary>
+    bool DemoForced { get; }
+
+    /// <summary>Whether Ctrl+Alt+L could be registered.</summary>
+    bool HotkeyRegistered { get; }
+
+    void SearchLyricsManually();
+    void Quit();
+}
+
 /// <summary>
-/// Notification-area icon. Milestone 3 only needs a way to quit and to compare the two positions;
-/// the full menu from AppDelegate.swift comes in milestone 6.
+/// Notification-area icon and menu, port of the status item in AppDelegate.swift. The menu is rebuilt each
+/// time it opens, so labels (now playing, timing offset) and check marks are always current; every change
+/// goes to <see cref="IslandSettings"/>, which saves itself and takes effect at once.
 /// </summary>
 internal sealed partial class TrayIcon : IDisposable
 {
+    private readonly ITrayHost _host;
     private readonly Forms.NotifyIcon _icon;
+    private readonly Forms.ContextMenuStrip _menu = new() { ShowCheckMargin = true, ShowImageMargin = false };
     private readonly Icon _image;
 
-    public TrayIcon(Func<IslandPosition> getPosition, Action<IslandPosition> setPosition, Action quit)
+    public TrayIcon(ITrayHost host)
     {
+        _host = host;
         _image = CreateBubbleIcon();
-        var menu = new Forms.ContextMenuStrip();
-        var header = new Forms.ToolStripMenuItem("Lyrics Island (preview)") { Enabled = false };
-        var top = new Forms.ToolStripMenuItem("Top Center", null, (_, _) => setPosition(IslandPosition.Top));
-        var bottom = new Forms.ToolStripMenuItem("Bottom Center", null, (_, _) => setPosition(IslandPosition.Bottom));
-        menu.Opening += (_, _) =>
-        {
-            top.Checked = getPosition() == IslandPosition.Top;
-            bottom.Checked = getPosition() == IslandPosition.Bottom;
-        };
-        menu.Items.AddRange([header, new Forms.ToolStripSeparator(), top, bottom, new Forms.ToolStripSeparator(),
-            new Forms.ToolStripMenuItem("Quit", null, (_, _) => quit())]);
+        _menu.Opening += (_, _) => Build();
+        Build(); // so the menu has items before it first opens (keyboard access, tests)
+        _icon = new Forms.NotifyIcon { Icon = _image, Text = "Lyrics Island", ContextMenuStrip = _menu, Visible = true };
+    }
 
-        _icon = new Forms.NotifyIcon { Icon = _image, Text = "Lyrics Island", ContextMenuStrip = menu, Visible = true };
+    /// <summary>Shows the menu at a screen point (screenshots, <c>--show-menu</c>).</summary>
+    public void ShowMenuAt(int x, int y)
+    {
+        Build();
+        _menu.Show(new Point(x, y));
     }
 
     public void Dispose()
     {
         _icon.Visible = false;
         _icon.Dispose();
+        _menu.Dispose();
         _image.Dispose();
+    }
+
+    private void Build()
+    {
+        var model = _host.Model;
+        var settings = _host.Settings;
+        var items = _menu.Items;
+        items.Clear();
+
+        var header = new Forms.ToolStripMenuItem("Lyrics Island") { Enabled = false };
+        header.Font = new Font(header.Font, FontStyle.Bold);
+        items.Add(header);
+
+        var nowPlaying = model.Track is { } t && model.Playback != PlaybackState.Stopped
+            ? $"Now playing: {t.Title} — {t.Artist}"
+            : _host.UsingDemo ? "Demo mode" : "Spotify isn't playing";
+        items.Add(new Forms.ToolStripMenuItem(Shorten(nowPlaying)) { Enabled = false });
+
+        if (!_host.UsingDemo && model.PlayerIssue == PlayerIssue.NoSupportedPlayer)
+        {
+            items.Add(Item("⚠ No supported player found — Get Spotify…", () => Open("https://www.spotify.com/download/windows/")));
+        }
+
+        items.Add(new Forms.ToolStripSeparator());
+        var show = Check("Show Island", settings.ShowIsland, () => settings.ShowIsland = !settings.ShowIsland);
+        show.ShortcutKeyDisplayString = _host.HotkeyRegistered ? "Ctrl+Alt+L" : "Ctrl+Alt+L (in use)";
+        items.Add(show);
+        items.Add(Check("Expand on Hover", settings.ExpandOnHover, () => settings.ExpandOnHover = !settings.ExpandOnHover));
+        items.Add(Check("Hide When an App Is Fullscreen", settings.HideInFullscreen, () => settings.HideInFullscreen = !settings.HideInFullscreen));
+
+        var size = new Forms.ToolStripMenuItem("Text Size");
+        foreach (var option in new[] { TextSize.Small, TextSize.Medium, TextSize.Large })
+        {
+            size.DropDownItems.Add(Check(option.Label(), settings.TextSize == option, () => settings.TextSize = option));
+        }
+        items.Add(size);
+
+        var position = new Forms.ToolStripMenuItem("Island Position");
+        position.DropDownItems.Add(Check("Top Center", settings.Placement == IslandPlacement.Top, () => settings.Placement = IslandPlacement.Top));
+        position.DropDownItems.Add(Check("Bottom Center (Above the Taskbar)", settings.Placement == IslandPlacement.Bottom, () => settings.Placement = IslandPlacement.Bottom));
+        items.Add(position);
+
+        var timing = new Forms.ToolStripMenuItem($"Lyrics Timing ({model.OffsetLabel})") { Enabled = model.Track is not null };
+        timing.DropDownItems.Add(Item("Lyrics Too Early (−0.5s)", () => model.AdjustOffset(-0.5)));
+        timing.DropDownItems.Add(Item("Lyrics Too Late (+0.5s)", () => model.AdjustOffset(0.5)));
+        timing.DropDownItems.Add(Item("Reset", model.ResetOffset));
+        items.Add(timing);
+
+        items.Add(new Forms.ToolStripSeparator());
+        var search = Item("Search Lyrics Manually…", _host.SearchLyricsManually);
+        search.Enabled = model.Track is not null && !_host.UsingDemo;
+        items.Add(search);
+        var demo = Check("Demo Mode (No Spotify Needed)", _host.UsingDemo, () => settings.DemoMode = !settings.DemoMode);
+        demo.Enabled = !_host.DemoForced;
+        items.Add(demo);
+
+        items.Add(new Forms.ToolStripSeparator());
+        items.Add(Check("Start with Windows", StartWithWindows.IsEnabled, () => StartWithWindows.Set(!StartWithWindows.IsEnabled)));
+        items.Add(Item("Quit Lyrics Island", _host.Quit));
+    }
+
+    private static Forms.ToolStripMenuItem Item(string text, Action action)
+    {
+        var item = new Forms.ToolStripMenuItem(text);
+        item.Click += (_, _) => action();
+        return item;
+    }
+
+    private static Forms.ToolStripMenuItem Check(string text, bool on, Action toggle)
+    {
+        var item = Item(text, toggle);
+        item.Checked = on;
+        return item;
+    }
+
+    /// <summary>Menu items get very wide with long titles; keep "Now playing" readable.</summary>
+    private static string Shorten(string text) => text.Length <= 64 ? text : text[..63] + "…";
+
+    private static void Open(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+        }
     }
 
     /// <summary>A white quote bubble, drawn at runtime so there's no binary asset yet.</summary>
