@@ -77,7 +77,9 @@ struct ExpandedLyrics: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .frame(minHeight: 118 * scale, alignment: .top)
+        // Measure the natural height, then never let the block get shorter while the panel is open.
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { model.noteLyricsHeight($0) }
+        .frame(minHeight: max(118 * scale, model.lyricsMinHeight), alignment: .top)
     }
 
     /// Shows the previous line, the active line and the next two.
