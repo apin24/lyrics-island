@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Everything that isn't UI: LRC parser, LRCLIB client, settings, demo player and the
+       island state machine. Plain net8.0, so it builds and tests anywhere. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>LyricsIsland.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="LyricsIsland.Core.Tests" />
+  </ItemGroup>
+
+</Project>

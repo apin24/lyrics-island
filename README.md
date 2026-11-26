@@ -2,7 +2,7 @@
 
 # Lyrics Island
 
-**Synced Spotify lyrics in a Dynamic Island–style pill at the top of your Mac's screen.**
+**Synced Spotify lyrics in a Dynamic Island–style pill at the top of your screen, for macOS and Windows.**
 
 The current line follows the song in real time. Hover the pill and it expands into a karaoke-style lyrics panel with playback controls.
 
@@ -12,6 +12,8 @@ The current line follows the song in real time. Hover the pill and it expands in
 brew tap apin24/tap && brew trust --tap apin24/tap
 brew install --cask apin24/tap/lyrics-island
 ```
+
+On Windows? Download the zip from the [latest release](https://github.com/apin24/lyrics-island/releases/latest) and see [Windows](#windows).
 
 ## Features
 
@@ -142,9 +144,79 @@ swift scripts/record-demo.swift build.noindex/LyricsIsland.app docs/demo.gif  # 
 swift scripts/make-icon.swift                                       # redraw Resources/AppIcon.icns + docs/icon.png
 ```
 
+## Windows
+
+![Lyrics Island on Windows: a song change, lines following the song, the hover panel, an interlude, a song without lyrics, then a pause](docs/screenshots/windows/transitions.gif)
+
+The same app, rebuilt for Windows with C# and WPF. It reads the current track from Windows' media controls (the ones in the volume flyout) and gets lyrics from LRCLIB, just like on the Mac. The download is self-contained: no .NET or anything else to install.
+
+### Requirements
+
+- Windows 10 version 1809 or later, or Windows 11, on x64 or Arm64
+- The **[Spotify desktop app](https://www.spotify.com/download/windows/)**, from the Microsoft Store or the installer on spotify.com
+
+### Install
+
+1. Download `LyricsIsland-Windows-<version>-x64.zip` from the [latest release](https://github.com/apin24/lyrics-island/releases/latest). On an Arm PC (for example a Snapdragon laptop), take `-arm64.zip`.
+2. Right-click the zip → **Extract All…**, into a folder that can stay where it is.
+3. Run **LyricsIsland.exe**. A speech-bubble icon appears in the notification area (it may be under the **^** arrow), and the island appears at the top of the screen when Spotify plays.
+
+### Allow it to run (one time)
+
+Lyrics Island isn't code-signed yet (that needs a paid certificate), so Microsoft Defender SmartScreen stops the first launch:
+
+1. Windows says **"Windows protected your PC"** → click **More info**.
+2. It shows *App: LyricsIsland.exe, Publisher: Unknown publisher* → click **Run anyway**.
+
+Later launches start without asking. Or remove the download mark from the zip before extracting it, in PowerShell:
+
+```powershell
+Unblock-File $HOME\Downloads\LyricsIsland-Windows-*.zip
+```
+
+### Use
+
+Everything from [Usage](#usage) works the same, with these differences:
+
+| On the Mac | On Windows |
+|---|---|
+| **⌥⌘L** | **Ctrl+Alt+L** shows / hides the island. If another app already uses it, the menu says "(in use)". |
+| 💬 menu bar icon | Speech-bubble icon in the notification area; left- or right-click it |
+| Open at login | Menu → **Start with Windows** |
+| Always at the top | Menu → **Island Position**: top center, or bottom center above the taskbar |
+
+Settings are saved in `%APPDATA%\LyricsIsland\settings.json`, lyrics in `%LOCALAPPDATA%\LyricsIsland\Cache`. As on the Mac, only the song's title, artist, album and duration are sent to `lrclib.net`.
+
+### Start with Windows
+
+Turn on **Start with Windows** in the menu. It remembers where `LyricsIsland.exe` is, so if you move the folder later, turn it off and on again.
+
+### Uninstall
+
+1. In the menu, turn off **Start with Windows**, then click **Quit Lyrics Island**.
+2. Delete the folder you extracted.
+3. Delete `%APPDATA%\LyricsIsland` and `%LOCALAPPDATA%\LyricsIsland` (paste each into File Explorer's address bar to open it).
+
+### Build from source on Windows
+
+Needs the [.NET SDK](https://dotnet.microsoft.com/download) 8 or newer. See [windows/README.md](windows/README.md) for options, tests and how the release zips are built.
+
+```powershell
+git clone https://github.com/apin24/lyrics-island.git
+cd lyrics-island\windows
+dotnet run --project LyricsIsland.Windows -- --demo
+```
+
+### Known limitations on Windows
+
+- Made for the Spotify desktop app. Other apps that show up in Windows' media controls (a browser, for example) may work, but haven't been tested.
+- Not code-signed: SmartScreen asks once (see above), and Windows 11's Smart App Control, when it's on, blocks unsigned apps altogether.
+- The island stays on the main display. It was tested at 100%, 125% and 150% scaling with the taskbar at the bottom.
+- The Arm64 build hasn't been tried on an Arm PC yet.
+
 ## Known limitations
 
-- macOS only, for now. A Windows version is planned; see the [Windows port brief](docs/windows-port.md).
+- The Windows version is new; see [its own limitations](#known-limitations-on-windows) and the [Windows port notes](docs/windows-port.md).
 - Spotify only on macOS. Apple Music support would be a nice contribution.
 - Designed and tested on a MacBook without a notch. On notched MacBooks the island sits just below the notch; that layout hasn't been tested on real hardware yet.
 - Some songs (local, niche, very new) aren't on LRCLIB. You can [contribute lyrics to LRCLIB](https://lrclib.net) to help everyone.
@@ -171,6 +243,7 @@ scripts/
   package-release.sh    universal build → build.noindex/LyricsIsland-<version>.zip + sha256
   record-demo.swift     screen-records --showcase and writes docs/demo.gif
   make-icon.swift       draws the app icon in code → Resources/AppIcon.icns
+windows/                the Windows version (C# + WPF on .NET 8), see windows/README.md
 ```
 
 ## Contributing

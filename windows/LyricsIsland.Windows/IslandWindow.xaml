@@ -1,0 +1,14 @@
+<Window x:Class="LyricsIsland.Windows.IslandWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:LyricsIsland.Windows"
+        Title="Lyrics Island"
+        Width="760" Height="420"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" Topmost="True" ShowInTaskbar="False" ShowActivated="False"
+        Focusable="False" UseLayoutRounding="True">
+    <!-- Fixed-size transparent window; the pill moves and grows inside it, the window never resizes. -->
+    <Grid>
+        <local:PillView x:Name="Pill" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0" />
+    </Grid>
+</Window>

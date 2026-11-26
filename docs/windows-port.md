@@ -61,12 +61,46 @@ var timeline = session.GetTimelineProperties();            // Position, EndTime,
 ```
 
 - **Events:** `SessionsChanged`, `CurrentSessionChanged`, and per session `MediaPropertiesChanged`, `PlaybackInfoChanged`, `TimelinePropertiesChanged`.
-- **Position:** the timeline isn't pushed continuously. Compute `position = timeline.Position + (now - timeline.LastUpdatedTime)` while playing, and tick locally about 10×/s. This is the same idea as the Mac's `PlayerSnapshot.position(at:)`. Only resync when the reported position drifts more than 0.35s from the local clock.
-- **Verify early:** how often Spotify updates `TimelineProperties`, and whether `LastUpdatedTime` is reliable. If the timeline is stale, add a fallback (resync on `PlaybackInfoChanged`, or estimate from the moment the track changed).
-- **Controls:** `TryTogglePlayPauseAsync`, `TrySkipNextAsync`, `TrySkipPreviousAsync`, `TryChangePlaybackPositionAsync(ticks)`. Check `playback.Controls.IsPlaybackPositionEnabled`. If Spotify doesn't allow seeking through SMTC, hide click-to-seek instead of showing a dead control.
+- **Position:** the timeline isn't pushed continuously. Compute `position = timeline.Position + (now - timeline.LastUpdatedTime)` while playing, and tick locally about 10×/s. This is the same idea as the Mac's `PlayerSnapshot.position(at:)`. Only resync when the reported position drifts more than 0.35s from the local clock. *Decided after milestone 1: the SMTC player takes every timeline report (`ResyncThreshold = 0`); 0.35s stays the default for the demo player and any other player. See [Findings](#findings-milestone-1).*
+- **Verify early:** how often Spotify updates `TimelineProperties`, and whether `LastUpdatedTime` is reliable. If the timeline is stale, add a fallback (resync on `PlaybackInfoChanged`, or estimate from the moment the track changed). *Done in milestone 1: the timeline is reliable. The fallback is still planned, see below.*
+- **Controls:** `TryTogglePlayPauseAsync`, `TrySkipNextAsync`, `TrySkipPreviousAsync`, `TryChangePlaybackPositionAsync(ticks)`. Check `playback.Controls.IsPlaybackPositionEnabled`. If Spotify doesn't allow seeking through SMTC, hide click-to-seek instead of showing a dead control. *Spotify allows seeking (milestone 1), but keep the check for other apps.*
 - **Artwork:** `props.Thumbnail.OpenReadAsync()` → `BitmapImage`.
 - **Track identity:** there's no Spotify track ID. Use a normalized key like `title|artist|album|round(duration)` for the lyrics cache and the per-song offset.
 - **Never block the UI thread** on SMTC or network calls.
+
+### Findings (milestone 1)
+
+Measured with [`windows/tools/SmtcProbe`](../windows/tools/SmtcProbe) (`--exercise`: play, seek, pause, resume, next track, then restore) on Windows 11 Enterprise build 26200, x64, with **Spotify from the Microsoft Store** (AUMID `SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify`). Three runs of about 50s each, 2026-11-26.
+
+| What | Result |
+|---|---|
+| `TimelinePropertiesChanged` | Fires reliably. Every timeline change arrived as an event; the 10×/s poll never saw a change first. |
+| Report rate | About every **4.5s** while playing (also while paused: same position, fresh timestamp), plus extra reports right after play, pause, seek and track change. |
+| `LastUpdatedTime` | Reliable. 1–4 ms old when the event arrives, never missing. |
+| Accuracy | Extrapolating a report matches the next periodic report within **±0.002s**. No fallback needed. |
+| Play / pause | The status event comes 30–300 ms after the command (once 1.4s, on the first play after Spotify had been idle). A timeline report with the exact position arrives in the same millisecond. |
+| Start-up correction | After playing from 0:00, a seek or a track change, Spotify reports `pos X`, then 0.1–0.2s later a second report that is **0.1–0.2s behind** the first one's extrapolation (audio starts after buffering). |
+| Seek | `IsPlaybackPositionEnabled` is true. `TryChangePlaybackPositionAsync` works, applied within ~15 ms, also while paused. Click-to-seek can stay. |
+| Track change | The timeline (pos 0, new `EndTime`) arrives first. `MediaPropertiesChanged` follows 80–100 ms later and fires **twice** with identical data. |
+| Metadata | Title, artist, album, album artist, `PlaybackType = Music`. Artwork is a PNG thumbnail (~170–215 KB) from `Thumbnail.OpenReadAsync()`. |
+| Controls | Play/pause, next, previous and seek are all enabled and accepted. |
+
+What this means for the app:
+
+1. **Resync rule (decided).** With the Mac rule (keep the local clock unless the track or play state changed or it drifts ≥ 0.35s), the clock stayed **0.11–0.15s ahead** after every seek and track change until the song ended, because the correcting report is under the threshold. The Mac needs the dead band since AppleScript positions are polled and coarse. SMTC reports are exact and timestamped, so **the SMTC player uses `ResyncThreshold = 0` and the model takes every timeline report** (the jumps are ≤ 0.25s and only happen right after play, seek or a track change). The demo player and any other player keep the Mac's 0.35s default. Tests: `ZeroThresholdAppliesSmtcCorrectionsAfterSeekAndTrackChange` replays the reports Spotify sent, and `MacThresholdKeepsTheClockAheadAfterSmtcCorrections` shows why.
+   - *Watch for in milestones 3–4:* a backward correction right after a seek can briefly move the lyric line back to the previous one when the position is right at a line boundary. Don't fix it pre-emptively. If it flickers on screen, add this rule: ignore a backward line change caused by a correction of less than 0.25s within 1s after a seek or a track change.
+2. A play-state change still takes the player's position, as on the Mac. The paused position arrives together with the status event.
+3. Dedupe `MediaPropertiesChanged` by the track key so the song-change state and the lyrics fetch run once per song. The timeline arrives first, so its `EndTime` is already the new song's duration when the key is built. The order isn't guaranteed, though, so re-key if `EndTime` changes within ~1s of a track change.
+4. Never block on any of this: every SMTC call above returned in under 10 ms, but events arrive on background threads.
+
+**If the timeline is stale or rarely updated** (not seen with Spotify, but other apps that use SMTC behave differently), the SMTC player should fall back like this:
+
+- `LastUpdatedTime` missing (it comes back as the year 1601): use the moment the report arrived as its timestamp.
+- No timeline report while playing: keep extrapolating the last report. That stays correct as long as playback runs at normal speed, and the probe showed Spotify re-reports every ~4.5s anyway.
+- Re-read `GetTimelineProperties()` on every `PlaybackInfoChanged` and `MediaPropertiesChanged`, not only on `TimelinePropertiesChanged`.
+- New track and no fresh timeline yet (its `EndTime` didn't change): assume position 0 at the moment the track changed.
+
+Not verified yet: the Spotify installer version from spotify.com (AUMID `Spotify.exe`), browsers (Spotify web player in Chrome or Edge), several sessions at once, win-arm64, and the probe's keyboard controls (they need someone at the keyboard).
 
 ## Lyrics (port of `LyricsService.swift` + `LRCParser.swift`)
 
@@ -109,6 +143,22 @@ var timeline = session.GetTimelineProperties();            // Position, EndTime,
   - Detect hover by polling `GetCursorPos` against the pill's screen rect. Don't rely on mouse-enter events of a click-through window.
   - Clicking the compact pill expands it right away.
 
+### Notes from milestone 2 (`LyricsIsland.Core`)
+
+`windows/LyricsIsland.Core` ports `IslandModel.swift`, `LyricsService.swift`, `LRCParser.swift`, `Settings.swift` and `DemoPlayer` with the same numbers and rules. It targets plain `net8.0`, so the tests also run on a Mac: `dotnet test windows/LyricsIsland.Core.Tests`. Every rule above has a test, and time is driven by a fake clock (`FakeTimeProvider`), so the timing tests are exact.
+
+Where it differs from the Mac code, and why:
+
+| Difference | Why |
+|---|---|
+| The resync threshold comes from the player (`IPlayer.ResyncThreshold`, default 0.35s as on the Mac). As on the Mac, a drift of exactly 0.35s already resyncs (the Mac keeps the clock only while the drift is `< 0.35`). | The SMTC player uses 0, as decided after the [milestone 1 findings](#findings-milestone-1). Nothing changes for the demo player. |
+| Cache file name: an ASCII prefix of the track ID plus 16 hex characters of its SHA-256. | Windows track IDs contain the title. With the Mac's "replace everything that isn't `[A-Za-z0-9_-]`", two Japanese titles by the same artist got the same file. |
+| Query values are escaped with `Uri.EscapeDataString`, so `+` becomes `%2B` and `&` becomes `%26`. | `URLComponents` on the Mac leaves `+` as is, which servers read as a space ("C++" → "C  "). Possibly worth fixing on the Mac too. |
+| Seconds are rounded half away from zero; text length counts grapheme clusters. | Matches Swift's `.rounded()` and `String.count`. .NET rounds halves to even and counts UTF-16 units by default. |
+| `PlayerIssue` has only `NoSupportedPlayer`. | The Mac's "not installed" / "not authorized" (Automation permission) don't exist with SMTC. |
+| The model takes `Tick(cursorOverPill)` and `IsFullscreen` from the app instead of reading the cursor, the menu bar or the screen itself. No `MenuBarScanner`, no artwork in the model. | Keeps Core free of Win32 and WPF so it can be tested anywhere. The WPF app (milestone 3+) does cursor polling, fullscreen detection and artwork. |
+| Settings are saved as `%APPDATA%\LyricsIsland\settings.json` already (`IslandSettings.Load/Save/SaveOnChange`). | The model needs per-song offsets now; the tray menu that edits the rest is still milestone 6. |
+
 ## Window (WPF specifics)
 
 - `WindowStyle=None`, `AllowsTransparency=True`, `Background=Transparent`, `Topmost=True`, `ShowInTaskbar=False`.
@@ -119,7 +169,205 @@ var timeline = session.GetTimelineProperties();            // Position, EndTime,
 - Use a fixed, larger transparent window (about 760×420 DIP) at the top center of the primary monitor, and animate the pill inside it. Don't resize the window per frame.
 - Per-monitor DPI awareness (PerMonitorV2) in `app.manifest`. Reposition when displays or DPI change.
 - **Fullscreen detection:** `SHQueryUserNotificationState` returns `QUNS_BUSY`, `QUNS_RUNNING_D3D_FULL_SCREEN` or `QUNS_PRESENTATION_MODE` when a fullscreen app is active. Use it for the opt-in "Hide when an app is fullscreen" setting (default off).
-- **Open question for the maintainer:** Windows has no menu bar, so a pill at the top center can cover browser tabs in maximized windows. Try *top center, 8 px from the top* first, compare it with *bottom center, just above the taskbar*, and make the position a setting if both are useful.
+- **Open question for the maintainer:** Windows has no menu bar, so a pill at the top center can cover browser tabs in maximized windows. Try *top center, 8 px from the top* first, compare it with *bottom center, just above the taskbar*, and make the position a setting if both are useful. *Compared in milestone 3, see below.*
+
+### Notes from milestone 3 (compact pill)
+
+`windows/LyricsIsland.Windows` is the WPF app. It runs the demo player only for now.
+
+- **Window:** 760×420 DIP, transparent, topmost, `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`. It's placed with `SetWindowPos` in physical pixels, centered on the primary monitor's work area, and placed again on `WM_DISPLAYCHANGE`, `WM_DPICHANGED` and `WM_SETTINGCHANGE` (`SPI_SETWORKAREA`, e.g. the taskbar moved). The pill sits 8 DIP inside the work area. In the bottom position the window reaches the bottom of the screen, so the pill's shadow can fall onto the taskbar.
+- **Click-through:** `WS_EX_TRANSPARENT` is set except while the cursor (polled with `GetCursorPos` every 100 ms) is inside the pill rect plus 3 DIP, as on the Mac.
+- **Look:** compact rows for lyric, interlude, loading, no lyrics, mini and paused, built from the Mac's `IslandView.swift` numbers. The text uses Segoe UI Variable Text Semibold 13. The pause icon is drawn as two bars, because the Segoe Fluent pause glyph is an outline and the Mac uses `pause.fill`. Off-screen renders of every state are in [`docs/screenshots/windows/`](screenshots/windows) (`LyricsIsland.exe --snapshot <dir>`).
+- **Temporary until later milestones:** no animations (milestone 4); song change shows as a compact "Title · Artist" row (milestone 4); hover-to-expand is switched off, and the expanded mode shows the compact row, until the panel exists (milestone 5); settings aren't saved and the tray menu only has Top Center / Bottom Center / Quit (milestone 6).
+
+Checked on the PC (Windows 11, 1920×1080 at 100%, taskbar at the bottom):
+
+| Check | Result |
+|---|---|
+| Placement | Window 580,0 760×420 px; pill 8 px from the top. Bottom: pill bottom 8 px above the taskbar (y 1024, taskbar from 1032). |
+| Extended styles | Tool window, no-activate and layered are set; click-through is on while the cursor is elsewhere. |
+| Click-through | Cursor elsewhere: click-through, the point belongs to the window below. Cursor on the pill: not click-through, the point belongs to the island. Cursor beside the pill (inside the window, on the shadow): click-through again. |
+| Focus | Starting the app and hovering the pill never changed the foreground window. |
+| Font | `Segoe UI Variable Text` resolves to Segoe UI Variable Text Semibold (SEGUIVAR.TTF). |
+| Size vs. Mac | The lyric pill is 268 px wide on screen and 536 px in the 2× snapshot, close to the Mac's lyric.png (564 px at 2×, measured the same way; SF Pro is a little wider than Segoe UI). |
+| CPU | 0.6% of one core with the equalizer running (Debug build). |
+
+Not checked yet: other scale factors, a DPI change while running, several monitors, and a taskbar at the top or side. The DropShadowEffect looks a little lighter than the Mac shadow at the same values (blur 24, offset 8, 35%); revisit it in milestone 4.
+
+**Top center vs. bottom center.** Both work; **top center should stay the default**, with bottom center as a setting:
+
+| | Top center (8 px from the top) | Bottom center (8 px above the taskbar) |
+|---|---|---|
+| Good | Same place as on the Mac, reads like a Dynamic Island. Nothing else lives there except the middle of a title bar. | Never covers title bars or browser tabs. |
+| Bad | In a maximized window it covers the middle of the title bar or tab strip (y 8–42). While the cursor is on the pill, whatever is beneath it can't be clicked. | Covers the bottom of maximized windows: chat input boxes, status bars, video player controls, which get used a lot while music plays. It also sits right on top of Windows 11's centered taskbar icons and looks crowded. On the PC it covered the toolbar under a chat input. |
+
+Milestone 6 should add an "Island Position: Top / Bottom" menu item (the preview tray menu already has it). *Agreed after review: top center is the default.*
+
+### Notes from milestone 4 (states and motion)
+
+All compact states, the song change state and the motion from `IslandView.swift` / `Components.swift`. Renders of every state and a GIF of the transitions are in [`docs/screenshots/windows/`](screenshots/windows) (`transitions.gif`: appear, song change, line changes, interlude, a track without lyrics, pause, disappear; made with `windows/tools/record-demo.ps1`, off screen on a simulated clock, flat background).
+
+| Piece | How |
+|---|---|
+| Springs | SwiftUI's `.spring(response:dampingFraction:)` simulated per frame: stiffness (2π/response)², damping 4π·dampingFraction/response, unit mass. A new target keeps the velocity, as in SwiftUI. Mode changes use (0.42, 0.82), line changes and text size (0.35, 0.86). |
+| Mode change | Width, height and corner radius on the mode spring; the old and new rows cross-fade in 0.18s, centered and clipped by the pill. |
+| Line change | The old line slides up and fades, the new one comes in from below, clipped to the 18 pt slot; the slot width follows on the line spring and the pill hugs it. Ends of the new line can be clipped for 2–3 frames while the pill is still growing. |
+| Appear / disappear | Scale from 0.4 plus fade on the mode spring, anchored at the screen edge (top, or bottom in the bottom position). |
+| Equalizer / dots | The Mac formulas, 20 fps on one shared clock; the equalizer is flat at 3/14 and stops when paused. |
+| Song change | 52 high, radius 26, art 36 (radius 9), title Semibold 14 + artist Regular 12 at white 60%, a 28 pt spacer before the equalizer. 100 px high at 2× like the Mac's songChange.png; 492 vs. 506 px wide (font). Segoe's taller line height is set to SF's 1.19 em, and the text block is nudged up 1.25 DIP, so the two lines sit like on the Mac. |
+| Text size | Compact text 13 × scale, max width 380 × scale, then ellipsis (Small 0.9 / Medium 1 / Large 1.15). |
+
+**Shadow.** `DropShadowEffect` blurs differently from SwiftUI: with the literal spec values (blur 24, offset 8, 35%) the shadow ends much closer to the pill. Rendering the lyric pill with several values and comparing the darkening under it with the Mac's `lyric.png` (every 3 px over 70 px at 2×) gave **blur 40, offset 8, opacity 0.42** (RMS difference 0.0095, vs. 0.043 for the literal values). The expanded shadow (0/20/50, 45%) needs the same calibration against `expanded.png` in milestone 5 (`--shadow blur,offset,opacity` overrides it for that). The shadow sits on its own layer with a `BitmapCache`, so the equalizer and line slides don't re-render the blur; it's only re-rendered while the pill changes size.
+
+**CPU.** The test PC's monitor runs at **180 Hz**, and `CompositionTarget.Rendering` fires at that rate. Every animation step re-presents the layered window, which costs about 1.4 ms of CPU however little changed. What was done:
+
+- Animations step at most 60 times a second (every third frame at 180 Hz), still in step with the display. A `DispatcherTimer` was a little cheaper but ticked unevenly (~45 fps, the 15.6 ms timer resolution).
+- Springs stop once they're within a quarter pixel (the invisible sub-pixel tail was half the frames).
+- Each lyric line is formatted and drawn once into its own `DrawingVisual`; a frame only moves its transform and changes its brush opacity. Re-drawing the text every frame cost ~1 ms per frame.
+- The equalizer and the dots share one 20 fps clock.
+
+**Measuring it correctly.** The first numbers came from `Process.TotalProcessorTime`, which Windows charges in 15.6 ms clock ticks to whichever thread happens to be running at the tick. Short bursts like a 20 fps redraw are mostly missed. A calibration load spinning 1 ms bursts at a real 3.1% read **1.82%** that way and **3.18%** with `QueryProcessCycleTime` (CPU cycles, converted with the 3.7 GHz base clock); one 50 ms burst per second read 5.46% vs. 4.97%. So these numbers are in cycles, idle PC, Release build, % of one core:
+
+| Scenario | Window | Runs | Average | (earlier, TotalProcessorTime) |
+|---|---|---|---|---|
+| A: 4 line changes in 20s | 3s–23s | 4.73 / 4.77 / 4.64 | **4.71%** | 2.19% |
+| B: 2 mode changes + 1 line change in 20s | 3s–23s | 4.89 / 4.77 / 4.85 | **4.84%** | 2.43% |
+| Interlude (equalizer + dots), nothing else | 15s–21s | 2.43 / 2.32 / 2.33 | **2.36%** | 0.61% |
+| Paused, nothing moving | 15s–21s | 0.38 / 0.41 / 0.39 | **0.40%** | 0.71% |
+
+**This misses the < 3% target** whenever the equalizer runs. Most of it is the layered window (`AllowsTransparency`): every redraw, however small, is rendered on the GPU, copied back and handed to `UpdateLayeredWindow`, about 1.2 ms of CPU per presented frame. The equalizer alone presents 20 frames a second. Paused is the lowest: nothing redraws, only the 100 ms tick runs (~110 µs per tick). The fullscreen check (~290 µs) now only runs when "Hide When an App Is Fullscreen" is on (off by default). Paused and interlude are measured 15s after start because the runtime's tiered JIT is still busy in the first seconds; that inflated the earlier paused number.
+
+**DPI.** Checked by changing the display scale while the app runs (`DisplayConfigSetDeviceInfo`, the same call the Settings app makes), then putting it back to 100%:
+
+| Scale | Window (px) | Pill | Gap to the edge |
+|---|---|---|---|
+| 100% | 580,0 760×420 | 34 px high | 8 px from the top |
+| 125% (live change) | 485,0 950×525 | 42 px high | 10 px from the top |
+| 150% (live change) | 390,0 1140×630 | 51 px high | 12 px from the top |
+| 150%, bottom position | 390,450 1140×630 | 945–996 | 12 px above the taskbar (work area ends at 1008) |
+| back to 100% (live change, bottom) | 580,660 760×420 | 990–1024 | 8 px above the taskbar |
+
+The window is re-centered and re-sized on every change, the gap scales with the DPI, and text, artwork and equalizer are re-rendered at the new resolution (sharp, not a scaled bitmap). Off-screen renders at those scales: [`lyric@125.png`](screenshots/windows/lyric@125.png), [`lyric@150.png`](screenshots/windows/lyric@150.png) (the screenshots taken on the PC show the desktop around the pill, so they aren't in the repo). Not checked: a second monitor (the PC has one).
+
+**Line clipped while the pill grows.** The Mac does the same: in `docs/demo.gif` (frames 192–194, "you said that everything's alright" → "but the night has never been this quiet") the new line reads "…this qu" and "…this quie" before the pill has grown. Left as is. Possible line flicker right after a seek can't happen yet (the demo never seeks); check it in milestone 5.
+
+### Notes from milestone 5 (hover panel, Spotify)
+
+**Window sized to the pill: tried, not done.** The idea was that the layered window's per-frame copy costs in proportion to its area. Measured in cycles with the equalizer running (interlude, 15s–21s, two runs each):
+
+| Window (DIP) | Area | CPU, % of one core |
+|---|---|---|
+| 760×420 (as is) | 319,200 | 2.36% |
+| 760×110 | 83,600 | 2.36% |
+| 300×420 | 126,000 | 2.30% |
+| 300×110 | 33,000 | 2.29% |
+
+A window ten times smaller saves 0.07%: WPF only copies what changed, so the cost per frame is fixed (presenting to DWM, GPU sync), not per pixel. Resizing and re-centering the window around the pill would add a risk of a one-frame jump for nothing, so the window stays 760×420.
+
+**Equalizer at 15 fps: tried, not kept.** 2.05% instead of 2.34% (three runs each), not worth the choppier bars. While measuring this it turned out that the equalizer really runs at **16 fps, not 20**: a `DispatcherTimer` only fires on the 15.6 ms system tick, so a 50 ms interval becomes 62.5 ms (counted: 16.0 ticks per second). An exact 20 fps would need a high-resolution timer and cost about 0.3% more. *Open: keep 16 fps or make it exactly 20?*
+
+CPU stays where milestone 4 left it: about 2.3% of one core with the equalizer running, 4.7–4.8% with frequent transitions, 0.4% paused. The < 1.5% / < 3% targets are not met; the cost is WPF's per-frame overhead for layered windows.
+
+**Hover panel** (`ExpandedPanel`, `ExpandedLyrics`): header (art 44, title, artist, equalizer), the previous line, the active line in Bold 22 with word-by-word karaoke, the next two lines at white 30% / 16%, the 4 pt progress bar with times, the source chip, ⏮ ⏯ ⏭ and the offset − / +. The 2× render is 1116×569 px, the Mac's expanded.png 1116×568. On a line change, lines that stay move to their new place, new ones come in from 14 pt below and old ones leave 14 pt up, fading, with SwiftUI's `.easeOut(duration: 0.3)` (cubic-bezier 0, 0, 0.58, 1). The panel's shadow goes from the compact values to (blur 80, offset 20, 45%→0.54) with the pill's height. Those expanded values are scaled from the compact calibration (radius 12 → blur 40, 35% → 0.42), not measured: expanded.png has no clean background under the panel's shadow.
+
+| Interaction | How |
+|---|---|
+| Hover 0.3s → expand, leave 1.0s → collapse | `IslandModel` timing, cursor polled every 100 ms |
+| Click the compact pill | expands right away |
+| Click a lyric line / the progress bar | seek to the line (time − offset + 0.05s) / to that fraction; disabled when the player can't seek |
+| Click the artwork | opens the player (Spotify through `spotify:`, other apps through their app ID) |
+| ⏮ ⏯ ⏭, − / + | previous / play-pause / next, lyrics timing ±0.5s per song |
+| "Search lyrics manually…" (panel, when no lyrics were found) | a small dialog; `GET /api/search?q=`; the top synced result is stored for the song |
+
+**Spotify through SMTC** (`SmtcPlayer`): prefers the Spotify session, else the current one; `ResyncThreshold = 0`; posts snapshots to the UI thread in order (an older read never overwrites a newer one); re-reads once a second as a safety net; artwork from the session thumbnail; a song keeps its first `title|artist|album|duration` key if its duration arrives late. The app now uses it by default; `--demo` (or `--demo-start`) runs the demo player.
+
+Checked against the real Spotify app (Microsoft Store version) by moving and clicking the cursor from a script, reading `--diagnose` and `--log-lines`:
+
+| Check | Result |
+|---|---|
+| Track, lyrics, can seek | Found through LRCLIB; player "Spotify"; seeking enabled |
+| Hover / leave | Expanded after hovering; collapsed 1.1s after the cursor left |
+| Click 3 lyric lines | Spotify jumped to each line |
+| Click the progress bar at 75% | Spotify reported 133.6s of 175.5s |
+| Play/pause twice | paused, then playing again (confirmed through SMTC) |
+| Click the compact pill | expanded at once |
+
+- **Line flicker after a seek: not seen.** Across 4 seeks the line index went straight to the target and never back (e.g. 42 → 43 → 44, no 41). Spotify's backward correction after a seek is relative to our extrapolation, not to the seek target: after seeking to "line start + 0.05s" the position only drops to about the target + 0.01s, still past the line start. A flicker would need a seek (e.g. from Spotify itself) landing less than ~0.1s before a line boundary. As agreed, no extra rule.
+- **Click-through and fast clicks.** The window stops being click-through on the next 100 ms tick after the cursor arrives, like the Mac. A click within ~100 ms of moving onto the pill goes to the window below it. People don't click that fast after arriving; the test script now rests 250 ms first.
+- **Seen twice, not reproduced since:** in two scripted runs the panel collapsed about 1–1.5s after a click on play/pause while the cursor was still on the panel. Three later runs (demo and Spotify) didn't show it. A likely cause is the panel getting shorter under a still cursor (a two-line karaoke line followed by a one-line one), or a stale click target in the script. `--log-lines` now also logs every hover in/out with the cursor and the pill rect, so the next occurrence shows the reason.
+- Not checked live: the manual search dialog (it needs a song without lyrics, and storing a search result changes the user's cache), and the panel in the bottom position. *Both checked in milestone 6, see below.*
+
+**Decided after review:** the window stays 760×420; the equalizer stays at its real 16 fps.
+
+### Notes from milestone 6 (tray menu, settings, follow-ups)
+
+**Panel closing by itself (fixed).** Cause: when a two-line karaoke line was followed by a one-line one, the panel got shorter, the progress bar and buttons moved up from under a resting cursor, the cursor was outside the pill, and the panel closed 1 s later. Now the lyrics area never shrinks while the panel is open: it keeps the tallest height it reached and starts over on the next expand. Checked with Text Size Large (where "but the night has never been this quiet" takes two lines), the cursor resting on play/pause and six clicks 1.5 s apart across the change to a one-line line: the panel stayed 305 px tall and open, all six clicks toggled playback, and the log showed no "hover out" until the cursor left.
+
+**Quick clicks.** Within 120 DIP of the pill the cursor is polled about 64 times a second (a 15 ms `DispatcherTimer`, so never faster than the system tick); further away it stays at 10 per second. Only click-through follows the fast polling; the hover timing stays on the 100 ms tick. Moving to 80 px below the pill, then onto it and clicking 30 ms later reached the pill 5 out of 5 times (click-through off in the same millisecond the cursor was seen inside, mouse-up 65–87 ms later). With the cursor resting near the pill, CPU went from 2.42% to 2.96% of one core. The fast tick now reuses the pill's screen rect from the 100 ms tick unless the pill is animating, and builds the trace text only when the hover state flips. *The CPU and quick-click numbers for that last change still need to be measured: the cursor couldn't be moved from a script while a Chrome Remote Desktop session was in the foreground (UIPI).*
+
+**Settings** are loaded from `%APPDATA%\LyricsIsland\settings.json` at start and saved on every change; `placement` (top/bottom) is new. Everything takes effect at once: the model reacts to visibility, hover, fullscreen, text size and offsets; the window moves for the position; the demo player and the media controls are swapped for Demo Mode; `--demo` forces the demo and greys out the item. Only one island runs per user session (a named mutex).
+
+**Tray menu** ([screenshot](screenshots/windows/tray-menu.png)), same order as AppDelegate.swift: "Lyrics Island", "Now playing: Title — Artist" (or "Demo mode" / "Spotify isn't playing"), a warning with a link to Spotify when no supported player is found, Show Island (Ctrl+Alt+L), Expand on Hover, Hide When an App Is Fullscreen, Text Size, Island Position (Windows only), Lyrics Timing (±0.0s) with Too Early / Too Late / Reset, Search Lyrics Manually…, Demo Mode (No Spotify Needed), Start with Windows (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `LyricsIsland`), Quit Lyrics Island. The menu is rebuilt each time it opens, so labels and check marks are current. Ctrl+Alt+L is a global hotkey (`RegisterHotKey`); if another app owns it, the menu says "(in use)".
+
+Checked live by opening the menu (`--show-menu`) and clicking its items through UI Automation, with a test settings file, reading `--diagnose` right after each click and starting the app again for the next step:
+
+| Item | Right away | After a restart |
+|---|---|---|
+| Expand on Hover | on → off | |
+| Text Size ▸ Large | Medium → Large | still Large |
+| Hide When an App Is Fullscreen | off → on | |
+| Lyrics Timing ▸ Too Late | +0.5s stored for the song | |
+| Island Position ▸ Bottom / Top | window moved to y 660 px / back to 0 | still Bottom |
+| Show Island off / on | hidden at once / back | |
+| Start with Windows on / off | Run value = quoted path of the exe / removed | |
+| Demo Mode on / off | Spotify → demo → Spotify, no restart | |
+| Quit Lyrics Island | process exited | |
+
+| Other check | Result |
+|---|---|
+| Bottom position with the panel open (`--expand`) | The panel grows upwards; its bottom edge is 8 px above the taskbar (pill 737–1024 px, taskbar from 1032), and the shadow falls onto the taskbar. |
+| Manual search, live (menu → dialog, through UI Automation) | Opens with the song's title and artist filled in. A query LRCLIB doesn't know shows "LRCLIB has no synced lyrics for …". A known song closes the dialog, stores the result (65 lines) and shows it at once. The user's lyrics cache was backed up and restored byte for byte. |
+| Ctrl+Alt+L | Registered, but not tested: injected keys were blocked for the same UIPI reason as the cursor. |
+
+### Notes from milestone 7 (release)
+
+**Tray menu.** Now a Win32 popup menu (`CreatePopupMenu` / `TrackPopupMenuEx`, [`NativeMenu.cs`](../windows/LyricsIsland.Windows/NativeMenu.cs)) instead of a WinForms `ContextMenuStrip`, which draws itself. It looks like the system's own menus: rounded corners on Windows 11, and dark or light following the system's app setting (uxtheme's `SetPreferredAppMode(AllowDark)` + `FlushMenuThemes`, ordinals 135 and 136, applied each time the menu opens). Same items and order as in milestone 6. [Screenshot](screenshots/windows/tray-menu.png), dark (this PC's setting).
+
+The managed UI Automation client sees a native menu as an empty pane, so the menu test now reads the items through MSAA (`AccessibleObjectFromWindow` on the `#32768` window: names, checked and disabled states), opens submenus with `MN_SELECTITEM` + a posted Right key, and chooses items with `accDoDefaultAction`. No cursor and no keyboard. Every item from the milestone 6 table gave the same result again, plus Lyrics Timing ▸ Reset (+0.5s → removed from settings) and Quit.
+
+**Version and icon.** 0.2.0 in `Directory.Build.props` and `app.manifest`. The exe now carries the Mac app's icon (`docs/icon.png` as a 16–256 px `.ico`); the tray icon is still drawn in code.
+
+**Release build.** `dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true` (and `win-arm64`), as planned. Single-file WPF leaves its native DLLs next to the exe; the zips ship them. Two options were measured on x64 and not used:
+
+| Option | Exe | Start (warm) | Memory after 8 s | Why not |
+|---|---|---|---|---|
+| Plain (shipped) | 171 MB + 8 MB DLLs | 0.7 s | 135–140 MB private, 120 MB working set | |
+| `EnableCompressionInSingleFile` | 71 MB + DLLs | 1.7 s | 211–213 MB private, 244 MB working set | The decompressed assemblies stay in memory for an app that runs all day. The zip is the same size either way. |
+| `IncludeNativeLibrariesForSelfExtract` | one 75 MB file (with compression) | 1.8 s | | Extracts the DLLs to `%TEMP%\.net\LyricsIsland` on start, which deleting the app's folder leaves behind. |
+
+Symbols are embedded (`DebugType=embedded` for single-file publishes), so no `.pdb` files.
+
+| Zip | Size | Contents |
+|---|---|---|
+| `LyricsIsland-Windows-0.2.0-x64.zip` | 72,235,536 bytes (68.9 MB) | `LyricsIsland.exe` (171 MB) + 5 DLLs |
+| `LyricsIsland-Windows-0.2.0-arm64.zip` | 68,012,167 bytes (64.9 MB) | `LyricsIsland.exe` (188 MB) + 4 DLLs (WPF ships no `D3DCompiler_47_cor3.dll` for Arm64) |
+
+**From-scratch test (x64 zip).** The app's data folders were backed up and removed first, so it was a first run. The zip got a `Zone.Identifier` (internet zone, a GitHub release URL) as if downloaded, Explorer's own zip support extracted it into a new folder (the mark carried over to every file), and Explorer started the exe, like a double-click:
+
+| Step | Result |
+|---|---|
+| Start | SmartScreen after about 3 s: "Windows protected your PC", *Microsoft Defender SmartScreen prevented an unrecognized app from starting*, buttons More info and Don't run. |
+| More info | *App: LyricsIsland.exe, Publisher: Unknown publisher*, buttons Run anyway and Don't run. |
+| Run anyway | The island starts from the extracted folder: window at the top center, tray icon. |
+| Second start of the same exe | No prompt; the process starts at once. |
+| `Unblock-File` on the zip, then extract and start | No prompt (the files carry no mark). |
+| Spotify (Store version) playing | Player Spotify, lyrics found, lines 3 → 4 → 5 over 8 s in step with the song, tray menu "Now playing: …", Search Lyrics Manually enabled. Spotify was paused and put back to 0:00 afterwards. |
+| Clean-up | The app's data restored byte for byte; nothing left in `%TEMP%`; the Run key untouched. |
+
+SmartScreen was answered through UI Automation (its prompt is an untitled `ApplicationFrameWindow` of explorer.exe). Smart App Control is off on this PC; when it's on, it blocks unsigned apps without a Run anyway button.
+
+**Not tested yet:** the Arm64 zip (no Arm PC here), the light menu (this PC is in dark mode, and changing it is a system setting), scaling other than 100/125/150%, several monitors, a taskbar on the side or top, Spotify from spotify.com (only the Store version), the web player in a browser, and three checks that need the real cursor and keyboard, which a remote desktop session blocked: a quick click after the cached pill rectangle, CPU with the cursor resting near the pill since that change, and Ctrl+Alt+L.
+
 
 ## Visual spec (from the Mac app and Figma)
 

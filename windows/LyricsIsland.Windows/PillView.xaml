@@ -1,0 +1,33 @@
+<UserControl x:Class="LyricsIsland.Windows.PillView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LyricsIsland.Windows"
+             TextOptions.TextFormattingMode="Ideal">
+    <!-- The black pill. Its frame (size and corner radius) is animated in code on a spring;
+         rows are cross-faded inside it. Visual spec: docs/windows-port.md. -->
+    <Grid x:Name="Root" Visibility="Collapsed" Opacity="0">
+        <Grid.RenderTransform>
+            <ScaleTransform x:Name="RootScale" />
+        </Grid.RenderTransform>
+
+        <Grid x:Name="Frame">
+            <!-- The shadow lives on its own static shape, cached as a bitmap, so the equalizer and
+                 line slides inside the pill never re-render the blur. -->
+            <Border x:Name="ShadowLayer" Background="Black">
+                <Border.Effect>
+                    <DropShadowEffect x:Name="Shadow" Color="Black" Direction="270" RenderingBias="Quality" />
+                </Border.Effect>
+                <Border.CacheMode>
+                    <BitmapCache SnapsToDevicePixels="True" />
+                </Border.CacheMode>
+            </Border>
+
+            <Border x:Name="Body" Background="Black">
+                <local:CenterPanel x:Name="ContentHost" />
+            </Border>
+
+            <!-- 1 px inner border, white 9% -->
+            <Border x:Name="Stroke" BorderThickness="1" BorderBrush="#17FFFFFF" IsHitTestVisible="False" />
+        </Grid>
+    </Grid>
+</UserControl>
