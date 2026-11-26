@@ -14,6 +14,8 @@ internal static class Theme
     public static readonly Brush White42 = Frozen(Color.FromArgb(107, 255, 255, 255));
     public static readonly Brush White30 = Frozen(Color.FromArgb(77, 255, 255, 255));
     public static readonly Brush White16 = Frozen(Color.FromArgb(41, 255, 255, 255));
+    public static readonly Brush White35 = Frozen(Color.FromArgb(89, 255, 255, 255));
+    public static readonly Brush White70 = Frozen(Color.FromArgb(179, 255, 255, 255));
     public static readonly Brush ChipBackground = Frozen(Color.FromArgb(36, 255, 255, 255));
     public static readonly Brush Green = Frozen(Color.FromRgb(0x1E, 0xD7, 0x60));
 
@@ -71,9 +73,18 @@ public abstract class AnimatedElement : FrameworkElement
     private static readonly HashSet<AnimatedElement> Ticking = [];
     private static DispatcherTimer? _clock;
 
+    /// <summary>
+    /// Redraws per second of the equalizer and dots (the Mac uses 20). A DispatcherTimer only fires on the
+    /// 15.6 ms system tick, so a 50 ms interval really runs every 62.5 ms: 16 fps, measured.
+    /// </summary>
+    public const double Fps = 20;
+
     /// <summary>For <c>--diagnose</c>: what keeps the 20 fps clock running.</summary>
     public static string DescribeTicking() =>
-        Ticking.Count == 0 ? "stopped" : $"{Ticking.Count} element(s): {string.Join(", ", Ticking.Select(e => e.GetType().Name))}";
+        (Ticking.Count == 0 ? "stopped" : $"{Ticking.Count} element(s): {string.Join(", ", Ticking.Select(e => e.GetType().Name))}") +
+        $"; {ClockTicks} ticks so far";
+
+    private static long ClockTicks { get; set; }
 
     protected AnimatedElement()
     {
@@ -100,9 +111,10 @@ public abstract class AnimatedElement : FrameworkElement
         if (ticking ? !Ticking.Add(this) : !Ticking.Remove(this)) return;
         if (Ticking.Count > 0 && _clock is null)
         {
-            _clock = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromSeconds(1 / 20.0) };
+            _clock = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromSeconds(1 / Fps) };
             _clock.Tick += (_, _) =>
             {
+                ClockTicks++;
                 foreach (var element in Ticking) element.InvalidateVisual();
             };
             _clock.Start();

@@ -615,6 +615,19 @@ public class IslandModelTests
     }
 
     [Fact]
+    public void PreviewCanShowOtherLyricsStates()
+    {
+        using var h = new ModelHarness();
+
+        h.Model.LoadPreview(12, LyricsStatus.NotFound);
+        Assert.Equal(LyricsState.NotFound, h.Model.LyricsStatus.State);
+        Assert.Null(h.Model.LineIndex);
+
+        h.Model.LoadPreview(12, LyricsStatus.Loading);
+        Assert.Equal(IslandMode.Loading, h.Model.Mode);
+    }
+
+    [Fact]
     public void ForcedModeWins()
     {
         using var h = new ModelHarness();

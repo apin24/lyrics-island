@@ -7,7 +7,7 @@ using LyricsIsland.Core;
 
 namespace LyricsIsland.Windows;
 
-/// <summary>What the pill shows. Expanded maps to Lyric/Interlude until the panel exists (milestone 5).</summary>
+/// <summary>What the pill shows.</summary>
 public enum RowKind
 {
     Lyric,
@@ -17,20 +17,23 @@ public enum RowKind
     Mini,
     Paused,
     SongChange,
+    Expanded,
 }
 
 /// <summary>
 /// One state's content inside the pill (port of <c>content(_:)</c>, <c>CompactRow</c> and <c>SongChangeView</c>
-/// in IslandView.swift). A new row is built on every mode change and cross-faded with the old one;
-/// within a mode, <see cref="Update"/> changes it in place.
+/// in IslandView.swift, plus the hover panel). A new row is built on every mode change and cross-faded with
+/// the old one; within a mode, <see cref="Update"/> changes it in place.
 /// </summary>
 public sealed class PillRow : Border
 {
     private readonly LyricTicker? _ticker;
     private readonly Equalizer? _equalizer;
+    private readonly ArtView? _art;
     private readonly TextBlock? _label;
     private readonly TextBlock? _title;
     private readonly TextBlock? _artist;
+    private readonly ExpandedPanel? _panel;
     private double _scale = double.NaN;
 
     public PillRow(RowKind kind, IslandModel model)
@@ -39,6 +42,12 @@ public sealed class PillRow : Border
         HorizontalAlignment = HorizontalAlignment.Center;
         VerticalAlignment = VerticalAlignment.Center;
 
+        if (kind == RowKind.Expanded)
+        {
+            Child = _panel = new ExpandedPanel(model);
+            return;
+        }
+
         var row = new HStack { Spacing = kind == RowKind.SongChange ? 12 : 10 };
         Child = row;
         if (kind == RowKind.SongChange)
@@ -46,7 +55,7 @@ public sealed class PillRow : Border
             // HStack(spacing: 12) { art 36; title/artist ≤ 260; clear 28; equalizer }.padding(.leading, 8).padding(.trailing, 16), height 52
             Height = 52;
             Padding = new Thickness(8, 0, 16, 0);
-            row.Children.Add(new PlaceholderArt { Width = 36, Height = 36, CornerRadius = 9 });
+            row.Children.Add(_art = new ArtView(36, 9));
             _title = Text(14, FontWeights.SemiBold, Theme.White);
             _artist = Text(12, FontWeights.Normal, Theme.White60);
             _artist.Margin = new Thickness(0, 1, 0, 0);
@@ -72,13 +81,7 @@ public sealed class PillRow : Border
             _ => 12,
         };
         Padding = new Thickness(6, 0, trailing, 0);
-        row.Children.Add(new PlaceholderArt
-        {
-            Width = 22,
-            Height = 22,
-            CornerRadius = 6,
-            Opacity = kind == RowKind.Paused ? 0.55 : 1,
-        });
+        row.Children.Add(_art = new ArtView(22, 6) { Opacity = kind == RowKind.Paused ? 0.55 : 1 });
 
         switch (kind)
         {
@@ -97,7 +100,9 @@ public sealed class PillRow : Border
             case RowKind.NoLyrics:
                 row.Children.Add(_title = Text(13, FontWeights.SemiBold, Theme.White));
                 _title.MaxWidth = 300;
-                row.Children.Add(Chip("No lyrics"));
+                var chip = new Chip();
+                chip.Set(("No lyrics", null));
+                row.Children.Add(chip);
                 break;
             case RowKind.Mini:
                 row.Children.Add(_equalizer = new Equalizer());
@@ -112,10 +117,15 @@ public sealed class PillRow : Border
 
     public RowKind Kind { get; }
 
-    /// <summary>Corner radius of the pill around this row: 26 for song change, 17 for the compact rows.</summary>
-    public double Radius => Kind == RowKind.SongChange ? 26 : 17;
+    /// <summary>Corner radius of the pill around this row: 32 expanded, 26 song change, 17 compact.</summary>
+    public double Radius => Kind switch
+    {
+        RowKind.Expanded => 32,
+        RowKind.SongChange => 26,
+        _ => 17,
+    };
 
-    public bool IsAnimating => _ticker?.IsAnimating ?? false;
+    public bool IsAnimating => (_ticker?.IsAnimating ?? false) || (_panel?.IsAnimating ?? false);
 
     public static RowKind? KindFor(IslandModel model) => model.Mode switch
     {
@@ -127,12 +137,18 @@ public sealed class PillRow : Border
         IslandMode.Mini => RowKind.Mini,
         IslandMode.Paused => RowKind.Paused,
         IslandMode.SongChange => RowKind.SongChange,
-        _ => model.CurrentLine is null ? RowKind.Interlude : RowKind.Lyric, // Expanded until milestone 5
+        _ => RowKind.Expanded,
     };
 
     /// <summary>Brings the row up to date. Returns true when its size may have changed.</summary>
     public bool Update(IslandModel model, bool animate)
     {
+        if (_panel is not null)
+        {
+            _panel.Update(animate);
+            return false;
+        }
+        if (_art is not null) _art.TrackId = model.Track?.Id;
         if (_equalizer is not null) _equalizer.Playing = model.Playback == PlaybackState.Playing;
         var scale = model.Settings.TextSize.Scale();
         var scaleChanged = scale != _scale;
@@ -167,29 +183,21 @@ public sealed class PillRow : Border
         return scaleChanged;
     }
 
-    public bool Step(double dt) => _ticker?.Step(dt) ?? false;
-
-    public void Finish() => _ticker?.Finish();
-
-    private static TextBlock Text(double size, FontWeight weight, Brush color, string? text = null) => new()
+    public bool Step(double dt)
     {
-        Text = text ?? "",
-        FontFamily = Theme.TextFont,
-        FontSize = size,
-        FontWeight = weight,
-        Foreground = color,
-        TextTrimming = TextTrimming.CharacterEllipsis,
-        TextWrapping = TextWrapping.NoWrap,
-        VerticalAlignment = VerticalAlignment.Center,
-    };
+        var moving = _ticker?.Step(dt) ?? false;
+        if (_panel?.Step(dt) == true) moving = true;
+        return moving;
+    }
 
-    private static Border Chip(string text) => new()
+    public void Finish()
     {
-        Background = Theme.ChipBackground,
-        CornerRadius = new CornerRadius(10),
-        Padding = new Thickness(8, 4, 8, 4),
-        Child = Text(11, FontWeights.Medium, Theme.White60, text),
-    };
+        _ticker?.Finish();
+        _panel?.Finish();
+    }
+
+    private static TextBlock Text(double size, FontWeight weight, Brush color, string? text = null) =>
+        ExpandedPanel.Text(size, weight, color, text ?? "");
 
     /// <summary>SF Symbol "pause.fill" at 10 pt bold: two solid bars.</summary>
     private static FrameworkElement PauseGlyph()

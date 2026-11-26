@@ -8,7 +8,7 @@ namespace LyricsIsland.Windows;
 public partial class App : Application
 {
     private LyricsService? _lyrics;
-    private DemoPlayer? _player;
+    private IPlayer? _player;
     private TrayIcon? _tray;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -30,22 +30,24 @@ public partial class App : Application
             return;
         }
 
-        // Settings aren't saved yet (milestone 6). Hover-to-expand stays off until the
-        // expanded panel exists (milestone 5).
-        var settings = new IslandSettings { ExpandOnHover = false };
+        // Settings aren't saved yet (milestone 6).
+        var settings = new IslandSettings();
         _lyrics = new LyricsService(AppPaths.CacheDirectory);
         var model = new IslandModel(settings, _lyrics);
 
         var window = new IslandWindow(model, options.Position);
         window.Show();
+        var lyrics = _lyrics;
+        ExpandedPanel.ManualSearchRequested += () => ManualSearchWindow.Show(model, lyrics);
 
-        // Started on the UI thread, so the demo player's updates arrive on it too.
-        _player = new DemoPlayer(options.DemoStart);
+        // Started on the UI thread, so the players' updates arrive on it too.
+        _player = options.Demo ? new DemoPlayer(options.DemoStart) : new SmtcPlayer();
         model.Attach(_player);
         if (options.PauseAfter is { } pause)
         {
-            if (pause <= 0) _player.PlayPause();
-            else After(TimeSpan.FromSeconds(pause), () => _player.PlayPause());
+            var player = _player;
+            if (pause <= 0) player.PlayPause();
+            else After(TimeSpan.FromSeconds(pause), player.PlayPause);
         }
 
         _tray = new TrayIcon(() => window.Position, window.SetPosition, Shutdown);
@@ -53,9 +55,27 @@ public partial class App : Application
         if (options.DiagnoseFile is { } file)
         {
             // Rewritten every 2s, so a script can watch it change (e.g. while the display scale changes).
-            var diagnose = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            var diagnose = new DispatcherTimer { Interval = TimeSpan.FromSeconds(options.DiagnoseSeconds) };
             diagnose.Tick += (_, _) => File.WriteAllText(file, $"time: {DateTime.Now:HH:mm:ss}\n" + window.Diagnose());
             diagnose.Start();
+        }
+        if (options.LineLogFile is { } log)
+        {
+            // For checking line flicker after a seek: one row per line change, no lyric text.
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var writer = new StreamWriter(log, append: false) { AutoFlush = true };
+            writer.WriteLine("ms,position,line,mode");
+            model.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName is nameof(IslandModel.LineIndex) or nameof(IslandModel.Mode) or nameof(IslandModel.Track))
+                {
+                    writer.WriteLine(string.Join(',', clock.ElapsedMilliseconds,
+                        model.CurrentTime.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture),
+                        model.LineIndex?.ToString() ?? "-", model.Mode));
+                }
+            };
+            window.Trace = message => writer.WriteLine($"{clock.ElapsedMilliseconds},{message}");
+            Exit += (_, _) => writer.Dispose();
         }
         if (options.ExitAfter is { } seconds)
         {
@@ -66,7 +86,8 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _tray?.Dispose();
-        _player?.Dispose();
+        _player?.Stop();
+        (_player as IDisposable)?.Dispose();
         _lyrics?.Dispose();
         base.OnExit(e);
     }

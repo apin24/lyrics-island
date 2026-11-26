@@ -48,19 +48,33 @@ internal static class Snapshot
         {
             Save(Render(model, dpiScale), Path.Combine(directory, $"lyric@{dpiScale * 100:0}.png"));
         }
+
+        // The hover panel, 720×360 like the Mac's expanded.png; 16.2s = "you said that" lit, 0:16 / -1:01.
+        foreach (var (name, status) in new[] { ("expanded", (LyricsStatus?)null), ("expanded-noLyrics", LyricsStatus.NotFound), ("expanded-loading", LyricsStatus.Loading) })
+        {
+            model.LoadPreview(16.2, status);
+            model.ForcedMode = IslandMode.Expanded;
+            Save(Render(model, Scale, ExpandedHeight), Path.Combine(directory, $"{name}.png"));
+        }
     }
 
-    private static BitmapSource Render(IslandModel model, double scale = Scale)
+    private const double ExpandedHeight = 360;
+
+    private static BitmapSource Render(IslandModel model, double scale = Scale, double height = Height)
     {
         var pill = new PillView { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 8, 0, 0) };
         pill.Render(model);
         pill.Finish();
-        var root = new Grid { Width = Width, Height = Height, Background = Background(), Children = { pill } };
-        root.Measure(new Size(Width, Height));
-        root.Arrange(new Rect(0, 0, Width, Height));
+        var root = new Grid { Width = Width, Height = height, Background = Background(), Children = { pill } };
+        root.Measure(new Size(Width, height));
+        root.Arrange(new Rect(0, 0, Width, height));
+        root.UpdateLayout();
+        // Second pass: rows measure their content on the first layout (text, karaoke).
+        pill.Render(model);
+        pill.Finish();
         root.UpdateLayout();
 
-        var bitmap = new RenderTargetBitmap((int)(Width * scale), (int)(Height * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+        var bitmap = new RenderTargetBitmap((int)(Width * scale), (int)(height * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
         bitmap.Render(root);
         bitmap.Freeze();
         return bitmap;

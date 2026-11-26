@@ -251,6 +251,52 @@ The window is re-centered and re-sized on every change, the gap scales with the 
 
 **Line clipped while the pill grows.** The Mac does the same: in `docs/demo.gif` (frames 192–194, "you said that everything's alright" → "but the night has never been this quiet") the new line reads "…this qu" and "…this quie" before the pill has grown. Left as is. Possible line flicker right after a seek can't happen yet (the demo never seeks); check it in milestone 5.
 
+### Notes from milestone 5 (hover panel, Spotify)
+
+**Window sized to the pill: tried, not done.** The idea was that the layered window's per-frame copy costs in proportion to its area. Measured in cycles with the equalizer running (interlude, 15s–21s, two runs each):
+
+| Window (DIP) | Area | CPU, % of one core |
+|---|---|---|
+| 760×420 (as is) | 319,200 | 2.36% |
+| 760×110 | 83,600 | 2.36% |
+| 300×420 | 126,000 | 2.30% |
+| 300×110 | 33,000 | 2.29% |
+
+A window ten times smaller saves 0.07%: WPF only copies what changed, so the cost per frame is fixed (presenting to DWM, GPU sync), not per pixel. Resizing and re-centering the window around the pill would add a risk of a one-frame jump for nothing, so the window stays 760×420.
+
+**Equalizer at 15 fps: tried, not kept.** 2.05% instead of 2.34% (three runs each), not worth the choppier bars. While measuring this it turned out that the equalizer really runs at **16 fps, not 20**: a `DispatcherTimer` only fires on the 15.6 ms system tick, so a 50 ms interval becomes 62.5 ms (counted: 16.0 ticks per second). An exact 20 fps would need a high-resolution timer and cost about 0.3% more. *Open: keep 16 fps or make it exactly 20?*
+
+CPU stays where milestone 4 left it: about 2.3% of one core with the equalizer running, 4.7–4.8% with frequent transitions, 0.4% paused. The < 1.5% / < 3% targets are not met; the cost is WPF's per-frame overhead for layered windows.
+
+**Hover panel** (`ExpandedPanel`, `ExpandedLyrics`): header (art 44, title, artist, equalizer), the previous line, the active line in Bold 22 with word-by-word karaoke, the next two lines at white 30% / 16%, the 4 pt progress bar with times, the source chip, ⏮ ⏯ ⏭ and the offset − / +. The 2× render is 1116×569 px, the Mac's expanded.png 1116×568. On a line change, lines that stay move to their new place, new ones come in from 14 pt below and old ones leave 14 pt up, fading, with SwiftUI's `.easeOut(duration: 0.3)` (cubic-bezier 0, 0, 0.58, 1). The panel's shadow goes from the compact values to (blur 80, offset 20, 45%→0.54) with the pill's height. Those expanded values are scaled from the compact calibration (radius 12 → blur 40, 35% → 0.42), not measured: expanded.png has no clean background under the panel's shadow.
+
+| Interaction | How |
+|---|---|
+| Hover 0.3s → expand, leave 1.0s → collapse | `IslandModel` timing, cursor polled every 100 ms |
+| Click the compact pill | expands right away |
+| Click a lyric line / the progress bar | seek to the line (time − offset + 0.05s) / to that fraction; disabled when the player can't seek |
+| Click the artwork | opens the player (Spotify through `spotify:`, other apps through their app ID) |
+| ⏮ ⏯ ⏭, − / + | previous / play-pause / next, lyrics timing ±0.5s per song |
+| "Search lyrics manually…" (panel, when no lyrics were found) | a small dialog; `GET /api/search?q=`; the top synced result is stored for the song |
+
+**Spotify through SMTC** (`SmtcPlayer`): prefers the Spotify session, else the current one; `ResyncThreshold = 0`; posts snapshots to the UI thread in order (an older read never overwrites a newer one); re-reads once a second as a safety net; artwork from the session thumbnail; a song keeps its first `title|artist|album|duration` key if its duration arrives late. The app now uses it by default; `--demo` (or `--demo-start`) runs the demo player.
+
+Checked against the real Spotify app (Microsoft Store version) by moving and clicking the cursor from a script, reading `--diagnose` and `--log-lines`:
+
+| Check | Result |
+|---|---|
+| Track, lyrics, can seek | Found through LRCLIB; player "Spotify"; seeking enabled |
+| Hover / leave | Expanded after hovering; collapsed 1.1s after the cursor left |
+| Click 3 lyric lines | Spotify jumped to each line |
+| Click the progress bar at 75% | Spotify reported 133.6s of 175.5s |
+| Play/pause twice | paused, then playing again (confirmed through SMTC) |
+| Click the compact pill | expanded at once |
+
+- **Line flicker after a seek: not seen.** Across 4 seeks the line index went straight to the target and never back (e.g. 42 → 43 → 44, no 41). Spotify's backward correction after a seek is relative to our extrapolation, not to the seek target: after seeking to "line start + 0.05s" the position only drops to about the target + 0.01s, still past the line start. A flicker would need a seek (e.g. from Spotify itself) landing less than ~0.1s before a line boundary. As agreed, no extra rule.
+- **Click-through and fast clicks.** The window stops being click-through on the next 100 ms tick after the cursor arrives, like the Mac. A click within ~100 ms of moving onto the pill goes to the window below it. People don't click that fast after arriving; the test script now rests 250 ms first.
+- **Seen twice, not reproduced since:** in two scripted runs the panel collapsed about 1–1.5s after a click on play/pause while the cursor was still on the panel. Three later runs (demo and Spotify) didn't show it. A likely cause is the panel getting shorter under a still cursor (a two-line karaoke line followed by a one-line one), or a stale click target in the script. `--log-lines` now also logs every hover in/out with the cursor and the pill rect, so the next occurrence shows the reason.
+- Not checked live: the manual search dialog (it needs a song without lyrics, and storing a search result changes the user's cache), and the panel in the bottom position.
+
 ## Visual spec (from the Mac app and Figma)
 
 | Element | Spec |

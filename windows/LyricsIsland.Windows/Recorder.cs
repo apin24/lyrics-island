@@ -16,7 +16,8 @@ namespace LyricsIsland.Windows;
 internal static class Recorder
 {
     public const int Fps = 25;
-    private const double Width = 420, Height = 84, Scale = 2;
+    // Tall enough for the hover panel (560×287 plus its shadow); 1.5× keeps the GIF small.
+    private const double Width = 680, Height = 340, Scale = 1.5;
     private static readonly Color BackgroundColor = Color.FromRgb(0x2B, 0x22, 0x44);
 
     public static void Record(string directory)
@@ -26,7 +27,7 @@ internal static class Recorder
 
         Animator.Manual = true;
         var time = new ManualTime();
-        var settings = new IslandSettings { ExpandOnHover = false };
+        var settings = new IslandSettings();
         using var lyrics = new LyricsService(Path.Combine(Path.GetTempPath(), "LyricsIslandRecorder"));
         var model = new IslandModel(settings, lyrics, time);
         var player = new ScriptPlayer(time);
@@ -43,8 +44,10 @@ internal static class Recorder
         {
             (0.4, () => player.Emit(song, PlaybackState.Playing, 16.0)),       // appear + song change (2.5s)
             (5.4, () => player.Emit(song, PlaybackState.Playing, 23.6)),       // skip ahead: next line at 5.8s
-            (7.3, () => player.Emit(song, PlaybackState.Playing, 28.2)),       // next line at 7.6s
-            (9.1, () => player.Emit(song, PlaybackState.Playing, 32.6)),       // blank line at 9.5s: interlude
+            (6.2, () => model.SimulatedHover = true),                           // hover: the panel opens after 0.3s
+            (7.3, () => player.Emit(song, PlaybackState.Playing, 28.2)),       // next line at 7.6s, inside the panel
+            (8.7, () => model.SimulatedHover = false),                          // leave: the panel closes after 1s
+            (9.8, () => player.Emit(song, PlaybackState.Playing, 32.6)),       // blank line at 10.2s: interlude
             (11.0, () => player.Emit(noLyrics, PlaybackState.Playing, 0)),     // song change, then "No lyrics"
             (15.0, () => player.Emit(noLyrics, PlaybackState.Paused, 4.0)),    // paused
             (16.5, () => player.Emit(null, PlaybackState.Stopped, 0)),         // disappear

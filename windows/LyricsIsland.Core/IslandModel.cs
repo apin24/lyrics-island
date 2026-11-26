@@ -398,13 +398,16 @@ public sealed class IslandModel : INotifyPropertyChanged
         NotifyMode();
     }
 
-    /// <summary>Fills the model with the demo song frozen at <paramref name="time"/> (snapshots and screenshots).</summary>
-    public void LoadPreview(double time)
+    /// <summary>
+    /// Fills the model with the demo song frozen at <paramref name="time"/> (snapshots and screenshots).
+    /// <paramref name="lyrics"/> overrides its lyrics status, e.g. to show "not found".
+    /// </summary>
+    public void LoadPreview(double time, LyricsStatus? lyrics = null)
     {
         var t = DemoPlayer.Tracks[0];
         Track = t;
         Playback = PlaybackState.Playing;
-        LyricsStatus = DemoPlayer.LyricsFor(t.Id) is { } lyrics ? LyricsStatus.Found(lyrics) : LyricsStatus.NotFound;
+        LyricsStatus = lyrics ?? (DemoPlayer.LyricsFor(t.Id) is { } demo ? LyricsStatus.Found(demo) : LyricsStatus.NotFound);
         _snapshot = new PlayerSnapshot(t, PlaybackState.Paused, time, _time.GetUtcNow());
         UpdateTime();
         NotifyMode();

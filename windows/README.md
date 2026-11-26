@@ -10,7 +10,7 @@ The Windows port of Lyrics Island: C# + WPF on .NET 8, reading the current track
 | 2. Core library + tests | Done, see [Notes from milestone 2](../docs/windows-port.md#notes-from-milestone-2-lyricsislandcore) |
 | 3. Compact pill | Done (demo player), see [Notes from milestone 3](../docs/windows-port.md#notes-from-milestone-3-compact-pill) |
 | 4. All states + animations | Done; CPU is above the 3% target while the equalizer runs, see [Notes from milestone 4](../docs/windows-port.md#notes-from-milestone-4-states-and-motion) |
-| 5. Expanded panel | To do |
+| 5. Expanded panel + Spotify | Done, see [Notes from milestone 5](../docs/windows-port.md#notes-from-milestone-5-hover-panel-spotify) |
 | 6. Tray menu, settings, hotkey | To do |
 | 7. Release | To do |
 
@@ -27,7 +27,7 @@ windows/
   Directory.Build.props        shared settings (version, nullable)
   LyricsIsland.Core/           LRC parser, LRCLIB client, settings, demo player, state machine (no UI, plain net8.0)
   LyricsIsland.Core.Tests/     xUnit tests for every timing and parsing rule
-  LyricsIsland.Windows/        the WPF app: transparent island window, pill, tray icon
+  LyricsIsland.Windows/        the WPF app: transparent island window, pill, hover panel, Spotify (SMTC) player, tray icon
   tools/SmtcProbe/             milestone 1: console probe for SMTC
   tools/record-demo.ps1        records the transitions GIF (needs ffmpeg)
 ```
@@ -39,16 +39,18 @@ cd windows
 dotnet run --project LyricsIsland.Windows
 ```
 
-For now it always plays the fictional demo song. Quit from the tray icon (the white speech bubble in the notification area), which can also move the island between the top and bottom center.
+It follows whatever Spotify (or, without Spotify, the current media session) is playing. Hover the pill to open the panel; click a line or the progress bar to seek. Quit from the tray icon (the white speech bubble in the notification area), which can also move the island between the top and bottom center.
 
 | Option | Meaning |
 |---|---|
-| `--demo-start <sec>` | Start the demo song at this position |
+| `--demo` | Play the fictional demo song instead of following Spotify |
+| `--demo-start <sec>` | Demo, starting at this position |
 | `--position top\|bottom` | Top center (default) or bottom center above the taskbar |
 | `--start-paused`, `--pause-after <sec>` | Pause the demo right away / after a while |
-| `--snapshot <dir>` | Render every pill state to PNG (2×, flat background), plus the lyric pill at 125% and 150%, and exit |
+| `--snapshot <dir>` | Render every pill state and the hover panel to PNG (2×, flat background), plus the lyric pill at 125% and 150%, and exit |
 | `--record <dir>` | Write the frames of a scripted demo (25 fps, off screen) and exit; `tools/record-demo.ps1` turns them into a GIF with ffmpeg |
-| `--diagnose <file>` | Every 2s, write the window and pill rects, DPI, extended styles, font and animation frame count to a file |
+| `--diagnose <file>` | Every 2s (`--diagnose-every <sec>`), write the window and pill rects, DPI, extended styles, font, hover state, animation frames and the panel's click targets to a file (never lyrics) |
+| `--log-lines <file>` | Log every line change, mode change and hover in/out with times (never lyrics) |
 | `--shadow <blur,offset,opacity>` | Override the pill shadow (for calibrating against the Mac screenshots) |
 | `--exit-after <sec>` | Quit by itself (scripted checks) |
 

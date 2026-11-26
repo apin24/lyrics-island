@@ -5,8 +5,8 @@ namespace LyricsIsland.Windows;
 /// <summary>Command-line options. Unknown arguments are ignored so a stray flag never stops the app.</summary>
 public sealed record AppOptions
 {
-    /// <summary>Use the demo player (milestone 3 always does; Spotify comes later).</summary>
-    public bool Demo { get; init; } = true;
+    /// <summary>Use the demo player instead of the media controls (Spotify). <c>--demo-start</c> implies it.</summary>
+    public bool Demo { get; init; }
 
     /// <summary>Where the demo song starts, in seconds (handy for screenshots).</summary>
     public double DemoStart { get; init; }
@@ -24,6 +24,12 @@ public sealed record AppOptions
 
     /// <summary>Write what the window looks like to Windows (rects, DPI, styles) to this file after 2s.</summary>
     public string? DiagnoseFile { get; init; }
+
+    /// <summary>How often <c>--diagnose</c> rewrites its file, in seconds (default 2).</summary>
+    public double DiagnoseSeconds { get; init; } = 2;
+
+    /// <summary>Append every line change (time, position, line index, mode; never the lyrics) to this file.</summary>
+    public string? LineLogFile { get; init; }
 
     /// <summary>Quit after this many seconds (scripted checks).</summary>
     public double? ExitAfter { get; init; }
@@ -50,7 +56,7 @@ public sealed record AppOptions
             options = args[i].ToLowerInvariant() switch
             {
                 "--demo" => options with { Demo = true },
-                "--demo-start" => options with { DemoStart = Number() ?? 0 },
+                "--demo-start" => options with { Demo = true, DemoStart = Number() ?? 0 },
                 "--start-paused" => options with { PauseAfter = 0 },
                 "--pause-after" => options with { PauseAfter = Number() },
                 "--position" => options with
@@ -60,6 +66,8 @@ public sealed record AppOptions
                 "--snapshot" => options with { SnapshotDirectory = Next() },
                 "--record" => options with { RecordDirectory = Next() },
                 "--diagnose" => options with { DiagnoseFile = Next() },
+                "--log-lines" => options with { LineLogFile = Next() },
+                "--diagnose-every" => options with { DiagnoseSeconds = Number() ?? 2 },
                 "--exit-after" => options with { ExitAfter = Number() },
                 "--shadow" => options with { Shadow = ParseShadow(Next()) },
                 _ => options,

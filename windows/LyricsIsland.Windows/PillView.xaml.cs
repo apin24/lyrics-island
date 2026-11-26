@@ -28,6 +28,15 @@ public partial class PillView : UserControl, IAnimated
     /// </summary>
     public static (double Blur, double Offset, double Opacity) CompactShadow { get; set; } = (40, 8, 0.42);
 
+    /// <summary>
+    /// Expanded shadow. Mac: <c>.shadow(color: .black.opacity(0.45), radius: 25, y: 20)</c> (spec "0/20/50, 45%"),
+    /// calibrated against the Mac's expanded.png the same way as <see cref="CompactShadow"/>.
+    /// </summary>
+    public static (double Blur, double Offset, double Opacity) ExpandedShadow { get; set; } = (80, 20, 0.54);
+
+    /// <summary>The compact pill (not the panel) was clicked: expand right away.</summary>
+    public event Action? CompactClicked;
+
     // Settle thresholds: a quarter pixel, below what can be seen (presence: 0.3% of the scale ≈ 1 px of a wide pill).
     private readonly Spring _width = new(Spring.Mode.Response, Spring.Mode.Damping, epsilon: 0.25);
     private readonly Spring _height = new(Spring.Mode.Response, Spring.Mode.Damping, epsilon: 0.25);
@@ -44,6 +53,12 @@ public partial class PillView : UserControl, IAnimated
     {
         InitializeComponent();
         SetShadow(CompactShadow);
+        Frame.MouseLeftButtonUp += (_, e) =>
+        {
+            if (e.Handled || _row is null || _row.Kind == RowKind.Expanded) return;
+            CompactClicked?.Invoke();
+            e.Handled = true;
+        };
         AnchorTop = true;
     }
 
@@ -177,14 +192,18 @@ public partial class PillView : UserControl, IAnimated
 
     /// <summary>Element sizes in DIPs, for <c>--diagnose</c>.</summary>
     public string DescribeLayout() =>
-        $"row {_row?.Kind}, frame {Frame.Width:0.#}x{Frame.Height:0.#} r{_radius.Value:0.#}, presence {_presence.Value:0.##}";
+        $"row {_row?.Kind}, frame {Frame.Width:0.#}x{Frame.Height:0.#} r{_radius.Value:0.#}, presence {_presence.Value:0.##}" +
+        (_row?.Child is ExpandedPanel panel ? "\ntargets: " + string.Join(" ", panel.DescribeTargets()) : "");
 
     public void SetShadow((double Blur, double Offset, double Opacity) shadow)
     {
+        // Equal values don't invalidate the cached shadow (DependencyProperty equality).
         Shadow.BlurRadius = shadow.Blur;
         Shadow.ShadowDepth = shadow.Offset;
         Shadow.Opacity = shadow.Opacity;
     }
+
+    private static double Lerp(double a, double b, double t) => a + (b - a) * t;
 
     private void ShowRow(PillRow next, bool crossFade)
     {
@@ -253,6 +272,11 @@ public partial class PillView : UserControl, IAnimated
 
         Frame.Width = w;
         Frame.Height = h;
+        // The shadow follows the height from the song-change pill (52) to the panel: compact → expanded values.
+        var panelHeight = _row?.Kind == RowKind.Expanded ? Math.Max(_height.Target, 100) : 285;
+        var t = Math.Clamp((h - 52) / (panelHeight - 52), 0, 1);
+        SetShadow((Lerp(CompactShadow.Blur, ExpandedShadow.Blur, t), Lerp(CompactShadow.Offset, ExpandedShadow.Offset, t),
+            Lerp(CompactShadow.Opacity, ExpandedShadow.Opacity, t)));
         var corner = new CornerRadius(r);
         ShadowLayer.CornerRadius = corner;
         Body.CornerRadius = corner;

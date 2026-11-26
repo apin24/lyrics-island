@@ -44,6 +44,8 @@ public partial class IslandWindow : Window
         _timer.Tick += (_, _) => Tick();
         SourceInitialized += OnSourceInitialized;
         _model.PropertyChanged += (_, _) => Pill.Render(_model);
+        // Clicking the compact pill expands it right away (the Mac's expandNow()).
+        Pill.CompactClicked += () => _model.ExpandNow();
     }
 
     public IslandPosition Position { get; private set; }
@@ -133,12 +135,30 @@ public partial class IslandWindow : Window
         _tickTime.Stop();
     }
 
+    /// <summary>Gets a line whenever the hover hit test flips (for <c>--log-lines</c>).</summary>
+    public Action<string>? Trace { get; set; }
+
+    private bool? _lastOver;
+
     private bool CursorOverPill()
     {
-        if (Pill.HitArea is not { } area || !Native.GetCursorPos(out var cursor)) return false;
-        var rect = ScreenRect(area);
-        rect.Inflate(HoverPadding * _scale, HoverPadding * _scale);
-        return rect.Contains(cursor.X, cursor.Y);
+        string why;
+        bool over;
+        if (Pill.HitArea is not { } area) (over, why) = (false, "no hit area (pill hidden or leaving)");
+        else if (!Native.GetCursorPos(out var cursor)) (over, why) = (false, "GetCursorPos failed");
+        else
+        {
+            var rect = ScreenRect(area);
+            rect.Inflate(HoverPadding * _scale, HoverPadding * _scale);
+            over = rect.Contains(cursor.X, cursor.Y);
+            why = $"cursor {cursor.X},{cursor.Y} rect {rect.X:0},{rect.Y:0} {rect.Width:0}x{rect.Height:0}";
+        }
+        if (over != _lastOver)
+        {
+            _lastOver = over;
+            Trace?.Invoke($"hover {(over ? "in" : "out")}: {why}");
+        }
+        return over;
     }
 
     /// <summary>An element's bounds in screen pixels.</summary>
@@ -179,10 +199,12 @@ public partial class IslandWindow : Window
         {
             sb.AppendLine("pill: hidden");
         }
-        sb.AppendLine($"mode: {_model.Mode} line: {_model.CurrentLine?.Text}");
+        // Line index and position only: never write lyrics to a file.
+        sb.AppendLine($"mode: {_model.Mode} line: {_model.LineIndex?.ToString() ?? "-"} position: {_model.CurrentTime:0.00} lyrics: {_model.LyricsStatus.State} player: {_model.PlayerName} canSeek: {_model.CanSeek}");
         sb.AppendLine($"ex-style: toolwindow={(style & Native.WS_EX_TOOLWINDOW) != 0} noactivate={(style & Native.WS_EX_NOACTIVATE) != 0}" +
                       $" layered={(style & Native.WS_EX_LAYERED) != 0} transparent(click-through)={(style & Native.WS_EX_TRANSPARENT) != 0}");
-        sb.AppendLine($"accepts mouse: {_model.AcceptsMouse}");
+        Native.GetCursorPos(out var cursor);
+        sb.AppendLine($"accepts mouse: {_model.AcceptsMouse}, expanded: {_model.IsExpanded}, cursor: {cursor.X},{cursor.Y}, over pill: {CursorOverPill()}");
         sb.AppendLine($"animator: {Animator.Describe()}");
         sb.AppendLine($"20 fps clock: {AnimatedElement.DescribeTicking()}");
         sb.AppendLine($"ticks: {_ticks}, {_tickTime.Elapsed.TotalMilliseconds * 1000 / Math.Max(1, _ticks):0} µs each on average; " +
