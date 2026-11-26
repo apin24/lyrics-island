@@ -1,6 +1,6 @@
-# Lyrics Island for Windows (work in progress)
+# Lyrics Island for Windows
 
-The Windows port of Lyrics Island: C# + WPF on .NET 8, reading the current track from the System Media Transport Controls (SMTC). The plan, decisions and findings are in the [Windows port brief](../docs/windows-port.md).
+The Windows port of Lyrics Island: C# + WPF on .NET 8, reading the current track from the System Media Transport Controls (SMTC). Installing and using it is in the [main README](../README.md#windows); the plan, decisions and findings are in the [Windows port brief](../docs/windows-port.md).
 
 ## Status
 
@@ -12,7 +12,7 @@ The Windows port of Lyrics Island: C# + WPF on .NET 8, reading the current track
 | 4. All states + animations | Done; CPU is above the 3% target while the equalizer runs, see [Notes from milestone 4](../docs/windows-port.md#notes-from-milestone-4-states-and-motion) |
 | 5. Expanded panel + Spotify | Done, see [Notes from milestone 5](../docs/windows-port.md#notes-from-milestone-5-hover-panel-spotify) |
 | 6. Tray menu, settings, hotkey | Done, see [Notes from milestone 6](../docs/windows-port.md#notes-from-milestone-6-tray-menu-settings-follow-ups) |
-| 7. Release | To do |
+| 7. Release | Done (0.2.0), see [Notes from milestone 7](../docs/windows-port.md#notes-from-milestone-7-release) |
 
 ## Requirements
 
@@ -65,6 +65,19 @@ dotnet test
 ```
 
 `LyricsIsland.Core` and its tests target plain `net8.0`, so they also run on macOS and Linux: `dotnet test windows/LyricsIsland.Core.Tests`.
+
+## Release zips
+
+Self-contained single-file builds, so users don't need .NET. From `windows/`:
+
+```powershell
+dotnet publish LyricsIsland.Windows -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publishd
+dotnet publish LyricsIsland.Windows -c Release -r win-arm64 --self-contained -p:PublishSingleFile=true -o publishrm64
+Compress-Archive publishd\* publish\LyricsIsland-Windows-<version>-x64.zip
+Compress-Archive publishrm64\* publish\LyricsIsland-Windows-<version>-arm64.zip
+```
+
+The version comes from `Directory.Build.props` (also update `app.manifest`). Each zip holds `LyricsIsland.exe` and WPF's native DLLs (`wpfgfx_cor3.dll`, `PresentationNative_cor3.dll`, `PenImc_cor3.dll`, `vcruntime140_cor3.dll`, and `D3DCompiler_47_cor3.dll` on x64), which must stay next to the exe. `Directory.Build.props` explains why they aren't bundled into the exe.
 
 ## SMTC probe
 

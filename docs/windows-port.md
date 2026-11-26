@@ -329,6 +329,45 @@ Checked live by opening the menu (`--show-menu`) and clicking its items through 
 | Manual search, live (menu → dialog, through UI Automation) | Opens with the song's title and artist filled in. A query LRCLIB doesn't know shows "LRCLIB has no synced lyrics for …". A known song closes the dialog, stores the result (65 lines) and shows it at once. The user's lyrics cache was backed up and restored byte for byte. |
 | Ctrl+Alt+L | Registered, but not tested: injected keys were blocked for the same UIPI reason as the cursor. |
 
+### Notes from milestone 7 (release)
+
+**Tray menu.** Now a Win32 popup menu (`CreatePopupMenu` / `TrackPopupMenuEx`, [`NativeMenu.cs`](../windows/LyricsIsland.Windows/NativeMenu.cs)) instead of a WinForms `ContextMenuStrip`, which draws itself. It looks like the system's own menus: rounded corners on Windows 11, and dark or light following the system's app setting (uxtheme's `SetPreferredAppMode(AllowDark)` + `FlushMenuThemes`, ordinals 135 and 136, applied each time the menu opens). Same items and order as in milestone 6. [Screenshot](screenshots/windows/tray-menu.png), dark (this PC's setting).
+
+The managed UI Automation client sees a native menu as an empty pane, so the menu test now reads the items through MSAA (`AccessibleObjectFromWindow` on the `#32768` window: names, checked and disabled states), opens submenus with `MN_SELECTITEM` + a posted Right key, and chooses items with `accDoDefaultAction`. No cursor and no keyboard. Every item from the milestone 6 table gave the same result again, plus Lyrics Timing ▸ Reset (+0.5s → removed from settings) and Quit.
+
+**Version and icon.** 0.2.0 in `Directory.Build.props` and `app.manifest`. The exe now carries the Mac app's icon (`docs/icon.png` as a 16–256 px `.ico`); the tray icon is still drawn in code.
+
+**Release build.** `dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true` (and `win-arm64`), as planned. Single-file WPF leaves its native DLLs next to the exe; the zips ship them. Two options were measured on x64 and not used:
+
+| Option | Exe | Start (warm) | Memory after 8 s | Why not |
+|---|---|---|---|---|
+| Plain (shipped) | 171 MB + 8 MB DLLs | 0.7 s | 135–140 MB private, 120 MB working set | |
+| `EnableCompressionInSingleFile` | 71 MB + DLLs | 1.7 s | 211–213 MB private, 244 MB working set | The decompressed assemblies stay in memory for an app that runs all day. The zip is the same size either way. |
+| `IncludeNativeLibrariesForSelfExtract` | one 75 MB file (with compression) | 1.8 s | | Extracts the DLLs to `%TEMP%\.net\LyricsIsland` on start, which deleting the app's folder leaves behind. |
+
+Symbols are embedded (`DebugType=embedded` for single-file publishes), so no `.pdb` files.
+
+| Zip | Size | Contents |
+|---|---|---|
+| `LyricsIsland-Windows-0.2.0-x64.zip` | 72,235,536 bytes (68.9 MB) | `LyricsIsland.exe` (171 MB) + 5 DLLs |
+| `LyricsIsland-Windows-0.2.0-arm64.zip` | 68,012,167 bytes (64.9 MB) | `LyricsIsland.exe` (188 MB) + 4 DLLs (WPF ships no `D3DCompiler_47_cor3.dll` for Arm64) |
+
+**From-scratch test (x64 zip).** The app's data folders were backed up and removed first, so it was a first run. The zip got a `Zone.Identifier` (internet zone, a GitHub release URL) as if downloaded, Explorer's own zip support extracted it into a new folder (the mark carried over to every file), and Explorer started the exe, like a double-click:
+
+| Step | Result |
+|---|---|
+| Start | SmartScreen after about 3 s: "Windows protected your PC", *Microsoft Defender SmartScreen prevented an unrecognized app from starting*, buttons More info and Don't run. |
+| More info | *App: LyricsIsland.exe, Publisher: Unknown publisher*, buttons Run anyway and Don't run. |
+| Run anyway | The island starts from the extracted folder: window at the top center, tray icon. |
+| Second start of the same exe | No prompt; the process starts at once. |
+| `Unblock-File` on the zip, then extract and start | No prompt (the files carry no mark). |
+| Spotify (Store version) playing | Player Spotify, lyrics found, lines 3 → 4 → 5 over 8 s in step with the song, tray menu "Now playing: …", Search Lyrics Manually enabled. Spotify was paused and put back to 0:00 afterwards. |
+| Clean-up | The app's data restored byte for byte; nothing left in `%TEMP%`; the Run key untouched. |
+
+SmartScreen was answered through UI Automation (its prompt is an untitled `ApplicationFrameWindow` of explorer.exe). Smart App Control is off on this PC; when it's on, it blocks unsigned apps without a Run anyway button.
+
+**Not tested yet:** the Arm64 zip (no Arm PC here), the light menu (this PC is in dark mode, and changing it is a system setting), scaling other than 100/125/150%, several monitors, a taskbar on the side or top, Spotify from spotify.com (only the Store version), the web player in a browser, and three checks that need the real cursor and keyboard, which a remote desktop session blocked: a quick click after the cached pill rectangle, CPU with the cursor resting near the pill since that change, and Ctrl+Alt+L.
+
 
 ## Visual spec (from the Mac app and Figma)
 
