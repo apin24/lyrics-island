@@ -102,6 +102,8 @@ final class LyricsService {
         var components = URLComponents(string: "https://lrclib.net")!
         components.path = path
         components.queryItems = items
+        // URLComponents leaves "+" unescaped, which servers read as a space ("C++" → "C  ").
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         let (data, response) = try await session.data(from: components.url!)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 404 { return nil }

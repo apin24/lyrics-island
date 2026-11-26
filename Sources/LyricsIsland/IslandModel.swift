@@ -15,7 +15,12 @@ final class IslandModel: ObservableObject {
     /// Not @Published: only the expanded view needs it every tick (see updateTime).
     private(set) var currentTime: Double = 0
     @Published private(set) var lineIndex: Int?
-    @Published private(set) var expanded = false
+    @Published private(set) var expanded = false {
+        didSet { if !expanded { lyricsMinHeight = 0 } }
+    }
+    /// Tallest the expanded lyrics block has been during the current expansion. The panel never
+    /// shrinks while it's open, so the controls can't slide out from under a resting cursor.
+    @Published private(set) var lyricsMinHeight: CGFloat = 0
     @Published private(set) var isFullscreen = false
     @Published private(set) var playerIssue: PlayerIssue?
     /// Compact pills never get wider than this, so they don't cover menu bar icons.
@@ -237,6 +242,11 @@ final class IslandModel: ObservableObject {
     }
 
     // MARK: - Actions
+
+    func noteLyricsHeight(_ height: CGFloat) {
+        guard expanded, height > lyricsMinHeight + 0.5 else { return }
+        lyricsMinHeight = height
+    }
 
     func expandNow() {
         expanded = true
